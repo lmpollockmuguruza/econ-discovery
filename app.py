@@ -41,21 +41,16 @@ st.set_page_config(
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PREMIUM CSS — APPLE-ESQUE DESIGN SYSTEM
+# PREMIUM CSS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 st.markdown("""
 <style>
-    /* ═══════════════════════════════════════════════════════════════
-       TYPOGRAPHY — SF Pro / System Font Stack
-       ═══════════════════════════════════════════════════════════════ */
     @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=DM+Sans:wght@400;500;600;700&display=swap');
     
     :root {
-        --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
-        --font-serif: 'Source Serif 4', 'New York', Georgia, serif;
-        
-        /* Colors */
+        --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        --font-serif: 'Source Serif 4', Georgia, serif;
         --bg-primary: #FAFAFA;
         --bg-card: #FFFFFF;
         --bg-elevated: #F5F5F7;
@@ -63,77 +58,45 @@ st.markdown("""
         --text-secondary: #6E6E73;
         --text-tertiary: #86868B;
         --accent: #0071E3;
-        --accent-hover: #0077ED;
         --success: #34C759;
         --warning: #FF9500;
-        --error: #FF3B30;
         --border: #D2D2D7;
         --border-light: #E8E8ED;
-        
-        /* Shadows */
         --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
         --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
-        --shadow-lg: 0 12px 40px rgba(0,0,0,0.12);
-        
-        /* Spacing */
-        --space-xs: 4px;
-        --space-sm: 8px;
-        --space-md: 16px;
-        --space-lg: 24px;
-        --space-xl: 40px;
-        --space-2xl: 64px;
-        
-        /* Radius */
         --radius-sm: 8px;
         --radius-md: 12px;
         --radius-lg: 16px;
-        --radius-xl: 24px;
     }
     
-    /* ═══════════════════════════════════════════════════════════════
-       BASE STYLES
-       ═══════════════════════════════════════════════════════════════ */
-    .stApp {
-        background-color: var(--bg-primary);
-    }
-    
+    .stApp { background-color: var(--bg-primary); }
     html, body, [class*="css"] {
         font-family: var(--font-sans);
         color: var(--text-primary);
     }
     
-    /* Hide Streamlit chrome */
     #MainMenu, footer, header {visibility: hidden;}
     .stDeployButton {display: none;}
     
-    /* ═══════════════════════════════════════════════════════════════
-       WIZARD PROGRESS BAR
-       ═══════════════════════════════════════════════════════════════ */
     .wizard-progress {
         display: flex;
         justify-content: center;
-        gap: var(--space-lg);
-        padding: var(--space-xl) 0;
-        margin-bottom: var(--space-xl);
+        gap: 24px;
+        padding: 40px 0;
+        margin-bottom: 40px;
     }
     
     .wizard-step {
         display: flex;
         align-items: center;
-        gap: var(--space-sm);
+        gap: 8px;
         color: var(--text-tertiary);
         font-size: 14px;
         font-weight: 500;
-        transition: all 0.3s ease;
     }
     
-    .wizard-step.active {
-        color: var(--text-primary);
-    }
-    
-    .wizard-step.completed {
-        color: var(--success);
-    }
+    .wizard-step.active { color: var(--text-primary); }
+    .wizard-step.completed { color: var(--success); }
     
     .step-number {
         width: 28px;
@@ -146,7 +109,6 @@ st.markdown("""
         font-size: 13px;
         background: var(--bg-elevated);
         border: 2px solid var(--border);
-        transition: all 0.3s ease;
     }
     
     .wizard-step.active .step-number {
@@ -165,19 +127,13 @@ st.markdown("""
         width: 60px;
         height: 2px;
         background: var(--border);
-        transition: background 0.3s ease;
     }
     
-    .step-line.completed {
-        background: var(--success);
-    }
+    .step-line.completed { background: var(--success); }
     
-    /* ═══════════════════════════════════════════════════════════════
-       HERO SECTION
-       ═══════════════════════════════════════════════════════════════ */
     .hero {
         text-align: center;
-        padding: var(--space-2xl) var(--space-xl);
+        padding: 64px 40px;
         max-width: 700px;
         margin: 0 auto;
     }
@@ -187,7 +143,7 @@ st.markdown("""
         font-size: 48px;
         font-weight: 600;
         letter-spacing: -0.02em;
-        margin-bottom: var(--space-md);
+        margin-bottom: 16px;
         color: var(--text-primary);
     }
     
@@ -197,35 +153,20 @@ st.markdown("""
         line-height: 1.6;
     }
     
-    /* ═══════════════════════════════════════════════════════════════
-       CARDS
-       ═══════════════════════════════════════════════════════════════ */
     .config-card {
         background: var(--bg-card);
         border-radius: var(--radius-lg);
-        padding: var(--space-xl);
+        padding: 40px;
         box-shadow: var(--shadow-sm);
         border: 1px solid var(--border-light);
-        margin-bottom: var(--space-lg);
+        margin-bottom: 24px;
     }
     
-    .config-card h3 {
-        font-size: 13px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--text-tertiary);
-        margin-bottom: var(--space-md);
-    }
-    
-    /* ═══════════════════════════════════════════════════════════════
-       MATCH CARDS — Paper Results
-       ═══════════════════════════════════════════════════════════════ */
     .match-card {
         background: var(--bg-card);
         border-radius: var(--radius-lg);
-        padding: var(--space-lg);
-        margin-bottom: var(--space-md);
+        padding: 24px;
+        margin-bottom: 16px;
         border: 1px solid var(--border-light);
         transition: all 0.2s ease;
     }
@@ -235,26 +176,17 @@ st.markdown("""
         border-color: var(--border);
     }
     
-    .match-card-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: var(--space-md);
-        margin-bottom: var(--space-md);
-    }
-    
     .match-card h4 {
         font-family: var(--font-serif);
         font-size: 18px;
         font-weight: 600;
         line-height: 1.4;
         color: var(--text-primary);
-        margin: 0;
-        flex: 1;
+        margin: 0 0 12px 0;
     }
     
     .relevance-badge {
-        display: flex;
+        display: inline-flex;
         align-items: center;
         gap: 6px;
         padding: 6px 12px;
@@ -264,57 +196,41 @@ st.markdown("""
         white-space: nowrap;
     }
     
-    .relevance-high {
-        background: #E8F5E9;
-        color: #2E7D32;
-    }
-    
-    .relevance-medium {
-        background: #FFF3E0;
-        color: #E65100;
-    }
-    
-    .relevance-low {
-        background: var(--bg-elevated);
-        color: var(--text-tertiary);
-    }
+    .relevance-high { background: #E8F5E9; color: #2E7D32; }
+    .relevance-medium { background: #FFF3E0; color: #E65100; }
+    .relevance-low { background: var(--bg-elevated); color: var(--text-tertiary); }
     
     .match-meta {
         font-size: 13px;
         color: var(--text-secondary);
-        margin-bottom: var(--space-md);
+        margin-bottom: 16px;
     }
     
     .match-summary {
         font-size: 15px;
         line-height: 1.6;
         color: var(--text-primary);
-        margin-bottom: var(--space-md);
-        padding-left: var(--space-md);
+        margin-bottom: 16px;
+        padding-left: 16px;
         border-left: 3px solid var(--accent);
     }
     
     .match-relevance {
         background: var(--bg-elevated);
-        padding: var(--space-md);
+        padding: 16px;
         border-radius: var(--radius-md);
         font-size: 14px;
         color: var(--text-secondary);
-        margin-bottom: var(--space-md);
+        margin-bottom: 16px;
     }
     
-    .match-relevance strong {
-        color: var(--text-primary);
-    }
+    .match-relevance strong { color: var(--text-primary); }
     
-    /* ═══════════════════════════════════════════════════════════════
-       PILL TAGS
-       ═══════════════════════════════════════════════════════════════ */
     .pill-container {
         display: flex;
         flex-wrap: wrap;
-        gap: var(--space-sm);
-        margin-top: var(--space-sm);
+        gap: 8px;
+        margin-top: 8px;
     }
     
     .pill {
@@ -327,35 +243,16 @@ st.markdown("""
         font-weight: 500;
     }
     
-    .pill-method {
-        background: #E3F2FD;
-        color: #1565C0;
-    }
+    .pill-method { background: #E3F2FD; color: #1565C0; }
+    .pill-topic { background: #F3E5F5; color: #7B1FA2; }
+    .pill-oa { background: #E8F5E9; color: #2E7D32; }
+    .pill-journal { background: var(--bg-elevated); color: var(--text-secondary); }
     
-    .pill-topic {
-        background: #F3E5F5;
-        color: #7B1FA2;
-    }
-    
-    .pill-oa {
-        background: #E8F5E9;
-        color: #2E7D32;
-    }
-    
-    .pill-journal {
-        background: var(--bg-elevated);
-        color: var(--text-secondary);
-    }
-    
-    /* ═══════════════════════════════════════════════════════════════
-       BUTTONS
-       ═══════════════════════════════════════════════════════════════ */
     .stButton > button {
         font-family: var(--font-sans);
         font-weight: 600;
         border-radius: var(--radius-md);
         padding: 12px 24px;
-        transition: all 0.2s ease;
     }
     
     .stButton > button[kind="primary"] {
@@ -366,75 +263,40 @@ st.markdown("""
     
     .stButton > button[kind="primary"]:hover {
         background: #333;
-        transform: translateY(-1px);
-        box-shadow: var(--shadow-md);
     }
     
-    .stButton > button[kind="secondary"] {
-        background: var(--bg-card);
-        color: var(--text-primary);
-        border: 1px solid var(--border);
-    }
-    
-    /* ═══════════════════════════════════════════════════════════════
-       FORM ELEMENTS
-       ═══════════════════════════════════════════════════════════════ */
-    .stTextInput > div > div > input,
-    .stSelectbox > div > div > div,
-    .stMultiSelect > div > div > div {
-        border-radius: var(--radius-md);
-        border-color: var(--border);
-    }
-    
-    .stTextInput > div > div > input:focus {
-        border-color: var(--accent);
-        box-shadow: 0 0 0 3px rgba(0,113,227,0.15);
-    }
-    
-    /* Slider styling */
-    .stSlider > div > div > div > div {
-        background: var(--accent);
-    }
-    
-    /* ═══════════════════════════════════════════════════════════════
-       SYNTHESIS BOX
-       ═══════════════════════════════════════════════════════════════ */
     .synthesis-box {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         border-radius: var(--radius-lg);
-        padding: var(--space-xl);
+        padding: 40px;
         color: white;
-        margin-bottom: var(--space-xl);
+        margin-bottom: 40px;
     }
     
     .synthesis-box h3 {
         font-family: var(--font-serif);
         font-size: 20px;
         font-weight: 600;
-        margin-bottom: var(--space-md);
-        opacity: 0.95;
+        margin-bottom: 16px;
     }
     
     .synthesis-box p {
         font-size: 15px;
         line-height: 1.7;
-        opacity: 0.9;
+        opacity: 0.95;
     }
     
-    /* ═══════════════════════════════════════════════════════════════
-       METRICS
-       ═══════════════════════════════════════════════════════════════ */
     .metric-row {
         display: flex;
-        gap: var(--space-md);
-        margin-bottom: var(--space-xl);
+        gap: 16px;
+        margin-bottom: 40px;
     }
     
     .metric-box {
         flex: 1;
         background: var(--bg-card);
         border-radius: var(--radius-md);
-        padding: var(--space-lg);
+        padding: 24px;
         text-align: center;
         border: 1px solid var(--border-light);
     }
@@ -450,16 +312,13 @@ st.markdown("""
         color: var(--text-tertiary);
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        margin-top: var(--space-xs);
+        margin-top: 4px;
     }
     
-    /* ═══════════════════════════════════════════════════════════════
-       STATUS MESSAGES
-       ═══════════════════════════════════════════════════════════════ */
     .status-success {
         background: #E8F5E9;
         color: #2E7D32;
-        padding: var(--space-md);
+        padding: 16px;
         border-radius: var(--radius-md);
         font-size: 14px;
     }
@@ -467,22 +326,11 @@ st.markdown("""
     .status-warning {
         background: #FFF3E0;
         color: #E65100;
-        padding: var(--space-md);
+        padding: 16px;
         border-radius: var(--radius-md);
         font-size: 14px;
     }
     
-    .status-error {
-        background: #FFEBEE;
-        color: #C62828;
-        padding: var(--space-md);
-        border-radius: var(--radius-md);
-        font-size: 14px;
-    }
-    
-    /* ═══════════════════════════════════════════════════════════════
-       RESPONSIVE
-       ═══════════════════════════════════════════════════════════════ */
     @media (max-width: 768px) {
         .hero h1 { font-size: 32px; }
         .wizard-progress { flex-wrap: wrap; }
@@ -505,7 +353,6 @@ def init_session_state():
         "synthesis": None,
         "user_profile": None,
         "api_key": "",
-        # Wizard data
         "w_academic_level": "PhD Student (ABD)",
         "w_primary_field": "Labor Economics",
         "w_interests": ["Causal Inference"],
@@ -531,7 +378,7 @@ init_session_state()
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_fetch_papers(journals_tuple: tuple, days_back: int, max_papers: int):
-    """Cached paper fetching to avoid redundant API calls."""
+    """Cached paper fetching."""
     return fetch_recent_papers(
         days_back=days_back,
         selected_journals=list(journals_tuple),
@@ -587,7 +434,6 @@ def render_match_card(paper: dict, index: int):
     score = paper.get("relevance_score", 5)
     has_ai = paper.get("has_ai_analysis", False)
     
-    # Determine relevance class
     if not has_ai:
         rel_class = "relevance-low"
         rel_icon = "○"
@@ -601,85 +447,50 @@ def render_match_card(paper: dict, index: int):
         rel_class = "relevance-low"
         rel_icon = "○"
     
-    # Authors
     authors = paper.get("authors", [])
     author_str = ", ".join(authors[:3])
     if len(authors) > 3:
-        author_str += f" et al."
+        author_str += " et al."
     
-    # Build pills HTML
     pills_html = '<div class="pill-container">'
     
-    # Method matches
     for method in paper.get("method_matches", [])[:2]:
         pills_html += f'<span class="pill pill-method">⚙ {method}</span>'
     
-    # Topic matches
     for topic in paper.get("topic_matches", [])[:2]:
         pills_html += f'<span class="pill pill-topic">◆ {topic}</span>'
     
-    # Open access
     if paper.get("is_open_access"):
         pills_html += '<span class="pill pill-oa">🔓 Open Access</span>'
     
-    # Journal tier
     tier = paper.get("journal_tier", 4)
     if tier == 1:
         pills_html += '<span class="pill pill-journal">★ Top Journal</span>'
     
     pills_html += '</div>'
     
-    # Render with Streamlit
     with st.container():
-        st.markdown(f"""
-        <div class="match-card">
-            <div class="match-card-header">
-                <h4>{paper.get('title', 'Untitled')}</h4>
-                <div class="relevance-badge {rel_class}">
-                    {rel_icon} {score}/10
-                </div>
-            </div>
-            <div class="match-meta">
-                {paper.get('journal', 'Unknown')} · {author_str} · {format_date(paper.get('publication_date'))}
-            </div>
-        """, unsafe_allow_html=True)
+        col1, col2 = st.columns([5, 1])
+        with col1:
+            st.markdown(f"**{paper.get('title', 'Untitled')}**")
+        with col2:
+            st.markdown(f'<span class="relevance-badge {rel_class}">{rel_icon} {score}/10</span>', unsafe_allow_html=True)
+        
+        st.caption(f"{paper.get('journal', 'Unknown')} · {author_str} · {format_date(paper.get('publication_date'))}")
         
         if has_ai and paper.get("ai_contribution"):
-            st.markdown(f"""
-            <div class="match-summary">
-                {paper.get('ai_contribution', '')}
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f"""<div class="match-summary">{paper.get('ai_contribution', '')}</div>""", unsafe_allow_html=True)
         
         if has_ai and paper.get("ai_relevance"):
-            st.markdown(f"""
-            <div class="match-relevance">
-                <strong>Why it matches:</strong> {paper.get('ai_relevance', '')}
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f"""<div class="match-relevance"><strong>Why it matches:</strong> {paper.get('ai_relevance', '')}</div>""", unsafe_allow_html=True)
         
         st.markdown(pills_html, unsafe_allow_html=True)
         
-        # Link button
         link = paper.get("doi_url") or paper.get("oa_url")
         if link:
-            st.markdown(f"""
-                <div style="margin-top: 12px;">
-                    <a href="{link}" target="_blank" style="
-                        display: inline-flex;
-                        align-items: center;
-                        gap: 6px;
-                        color: #0071E3;
-                        font-size: 14px;
-                        font-weight: 500;
-                        text-decoration: none;
-                    ">
-                        Read Paper →
-                    </a>
-                </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f"[Read Paper →]({link})")
         
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.divider()
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -700,8 +511,6 @@ def render_step_1_profile():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        st.markdown('<div class="config-card">', unsafe_allow_html=True)
-        
         st.markdown("##### 🔑 API Key")
         api_key = st.text_input(
             "Gemini API Key",
@@ -714,7 +523,7 @@ def render_step_1_profile():
         
         if api_key:
             if len(api_key) >= 30:
-                st.success("✓ Key looks valid", icon="✓")
+                st.success("✓ Key looks valid")
             else:
                 st.warning("Key seems short")
         
@@ -750,9 +559,6 @@ def render_step_1_profile():
         )
         st.session_state.w_region = region
         
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Navigation
         st.markdown("<br>", unsafe_allow_html=True)
         col_a, col_b = st.columns([1, 1])
         with col_b:
@@ -778,10 +584,8 @@ def render_step_2_interests():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        st.markdown('<div class="config-card">', unsafe_allow_html=True)
-        
         st.markdown("##### 🎯 Research Interests")
-        st.caption("Select up to 5 topics you care about")
+        st.caption("Select up to 5 topics")
         interests = st.multiselect(
             "Interests",
             options=options["secondary_interests"],
@@ -807,7 +611,6 @@ def render_step_2_interests():
         st.divider()
         
         st.markdown("##### 📊 Methodological Leaning")
-        st.caption("Where do you fall on the methods spectrum?")
         method_lean = st.slider(
             "Method Lean",
             min_value=0.0,
@@ -830,12 +633,9 @@ def render_step_2_interests():
         st.divider()
         
         st.markdown("##### 👥 Seed Authors (Optional)")
-        st.caption("Add researchers whose work you follow")
-        
-        # Show suggestions based on field
         suggestions = get_suggested_authors(st.session_state.w_primary_field)
         if suggestions:
-            st.caption(f"Suggestions for {st.session_state.w_primary_field}: {', '.join(suggestions[:3])}")
+            st.caption(f"Suggestions: {', '.join(suggestions[:3])}")
         
         seed_authors_input = st.text_input(
             "Seed Authors",
@@ -845,9 +645,6 @@ def render_step_2_interests():
         )
         st.session_state.w_seed_authors = [a.strip() for a in seed_authors_input.split(",") if a.strip()]
         
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Navigation
         st.markdown("<br>", unsafe_allow_html=True)
         col_a, col_b = st.columns([1, 1])
         with col_a:
@@ -879,8 +676,6 @@ def render_step_3_sources():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        st.markdown('<div class="config-card">', unsafe_allow_html=True)
-        
         st.markdown("##### 📖 Field")
         field_choice = st.radio(
             "Field",
@@ -893,7 +688,6 @@ def render_step_3_sources():
         
         st.markdown("##### 📚 Journals")
         
-        # Get available journals based on field choice
         if field_choice == "Economics":
             available = get_economics_journals()
             top_journals = journal_opts["economics"]["top5"]
@@ -904,7 +698,6 @@ def render_step_3_sources():
             available = get_all_journals()
             top_journals = journal_opts["economics"]["top5"][:3] + journal_opts["polisci"]["top3"][:2]
         
-        # Quick select buttons
         qcol1, qcol2 = st.columns(2)
         with qcol1:
             if st.button("Select Top Journals", use_container_width=True):
@@ -915,7 +708,6 @@ def render_step_3_sources():
                 st.session_state.w_journals = available
                 st.rerun()
         
-        # Filter current selection to available journals
         current_selection = [j for j in st.session_state.w_journals if j in available]
         if not current_selection:
             current_selection = top_journals[:3]
@@ -953,9 +745,6 @@ def render_step_3_sources():
         )
         st.session_state.w_max_papers = max_papers
         
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Navigation
         st.markdown("<br>", unsafe_allow_html=True)
         col_a, col_b = st.columns([1, 1])
         with col_a:
@@ -973,19 +762,13 @@ def render_step_3_sources():
 
 def render_step_4_results():
     """Step 4: Discovery and results."""
-    
-    # Check if we need to run discovery
     if not st.session_state.processed_papers:
         run_discovery()
-    
-    # Show results
     render_results()
 
 
 def run_discovery():
     """Execute the paper discovery pipeline."""
-    
-    # Build profile
     profile = create_user_profile(
         academic_level=st.session_state.w_academic_level,
         primary_field=st.session_state.w_primary_field,
@@ -997,7 +780,6 @@ def run_discovery():
     )
     st.session_state.user_profile = profile
     
-    # Progress container
     progress_container = st.empty()
     status_container = st.empty()
     
@@ -1005,13 +787,11 @@ def run_discovery():
         st.markdown("""
         <div style="text-align: center; padding: 60px 20px;">
             <div style="font-size: 48px; margin-bottom: 20px;">🔬</div>
-            <h2 style="font-family: var(--font-serif); margin-bottom: 10px;">Discovering papers...</h2>
-            <p style="color: #6E6E73;" id="status-text">Initializing</p>
+            <h2>Discovering papers...</h2>
         </div>
         """, unsafe_allow_html=True)
     
     try:
-        # Step 1: Fetch papers
         with status_container:
             st.info("📚 Fetching papers from OpenAlex...")
         
@@ -1024,7 +804,6 @@ def run_discovery():
         if not papers:
             progress_container.empty()
             status_container.error("No papers found. Try expanding your date range or journal selection.")
-            
             if st.button("← Adjust Settings"):
                 st.session_state.wizard_step = 3
                 st.rerun()
@@ -1035,7 +814,6 @@ def run_discovery():
         
         time.sleep(0.5)
         
-        # Step 2: AI Analysis
         with status_container:
             st.info("🤖 AI analyzing relevance...")
         
@@ -1055,7 +833,6 @@ def run_discovery():
         st.session_state.status_messages = messages
         st.session_state.synthesis = synthesis
         
-        # Clear progress UI
         progress_container.empty()
         status_container.empty()
         
@@ -1064,7 +841,6 @@ def run_discovery():
     except OpenAlexError as e:
         progress_container.empty()
         status_container.error(f"API Error: {str(e)}")
-        
     except Exception as e:
         progress_container.empty()
         status_container.error(f"Error: {str(e)}")
@@ -1073,26 +849,23 @@ def run_discovery():
 def render_results():
     """Render the discovery results."""
     papers = st.session_state.processed_papers
-    profile = st.session_state.user_profile
     synthesis = st.session_state.synthesis
     messages = st.session_state.status_messages
     
     if not papers:
-        st.warning("No papers to display. Please run discovery again.")
+        st.warning("No papers to display.")
         if st.button("← Back to Settings"):
-            st.session_state.wizard_step = 3
             st.session_state.processed_papers = []
+            st.session_state.wizard_step = 3
             st.rerun()
         return
     
-    # Header
     st.markdown("""
     <div class="hero" style="padding-bottom: 20px;">
         <h1>Your personalized reading list</h1>
     </div>
     """, unsafe_allow_html=True)
     
-    # Metrics
     analyzed = sum(1 for p in papers if p.get("has_ai_analysis"))
     high_rel = sum(1 for p in papers if p.get("relevance_score", 0) >= 8 and p.get("has_ai_analysis"))
     
@@ -1113,7 +886,6 @@ def render_results():
     </div>
     """, unsafe_allow_html=True)
     
-    # Synthesis box
     if synthesis:
         st.markdown(f"""
         <div class="synthesis-box">
@@ -1122,15 +894,12 @@ def render_results():
         </div>
         """, unsafe_allow_html=True)
     
-    # Status messages
     if messages:
         first_msg = messages[0]
         if "✓" in first_msg:
             st.markdown(f'<div class="status-success">{first_msg}</div>', unsafe_allow_html=True)
         elif "⚠️" in first_msg:
             st.markdown(f'<div class="status-warning">{first_msg}</div>', unsafe_allow_html=True)
-        else:
-            st.info(first_msg)
         
         if len(messages) > 1:
             with st.expander("View all status messages"):
@@ -1139,7 +908,6 @@ def render_results():
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Filters
     col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
     
     with col1:
@@ -1154,17 +922,15 @@ def render_results():
             st.session_state.wizard_step = 1
             st.rerun()
     
-    # Apply filters
     filtered = [p for p in papers if p.get("relevance_score", 0) >= min_score]
     if oa_only:
         filtered = [p for p in filtered if p.get("is_open_access")]
     
-    # Sort
     if sort_by == "Date":
         filtered.sort(key=lambda x: x.get("publication_date", ""), reverse=True)
     elif sort_by == "Citations":
         filtered.sort(key=lambda x: x.get("cited_by_count", 0), reverse=True)
-    else:  # Relevance
+    else:
         filtered.sort(
             key=lambda x: (x.get("has_ai_analysis", False), x.get("relevance_score", 0)),
             reverse=True
@@ -1172,15 +938,12 @@ def render_results():
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Results
     if not filtered:
-        st.info("No papers match your filters. Try adjusting the minimum relevance score.")
+        st.info("No papers match your filters.")
     else:
         for idx, paper in enumerate(filtered):
             render_match_card(paper, idx)
     
-    # Footer
-    st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown("""
     <div style="text-align: center; color: #86868B; font-size: 13px; padding: 20px;">
         Data from <a href="https://openalex.org" target="_blank" style="color: #0071E3;">OpenAlex</a> · 
@@ -1190,16 +953,13 @@ def render_results():
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# MAIN APPLICATION
+# MAIN
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def main():
     """Main application entry point."""
-    
-    # Render wizard progress
     render_wizard_progress(st.session_state.wizard_step)
     
-    # Render current step
     if st.session_state.wizard_step == 1:
         render_step_1_profile()
     elif st.session_state.wizard_step == 2:
