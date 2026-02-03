@@ -1,42 +1,23 @@
 """
-AI Processor for Literature Discovery
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Production-grade semantic search with vector embeddings,
-intelligent pre-ranking, and optimized LLM analysis.
+Semantic Matching Engine for Literature Discovery
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Gold-standard TF-IDF + Cosine Similarity matching with
+academically rigorous keyword taxonomies.
 
-Updated to use new google.genai SDK
+No external API dependencies - runs entirely locally.
 """
 
-import json
-import re
 import math
-import logging
-from typing import Optional, Tuple, List, Dict, Any
+import re
+import string
+from typing import List, Dict, Set, Tuple, Optional
 from dataclasses import dataclass, field
 from functools import lru_cache
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# SDK availability
-GENAI_AVAILABLE = False
-genai = None
-types = None
-
-try:
-    from google import genai as google_genai
-    from google.genai import types as genai_types
-    genai = google_genai
-    types = genai_types
-    GENAI_AVAILABLE = True
-    logger.info("google.genai SDK loaded successfully")
-except ImportError:
-    logger.warning("google.genai SDK not available")
+from collections import Counter
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# ENHANCED USER PROFILE OPTIONS
+# USER PROFILE OPTIONS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ACADEMIC_LEVELS = [
@@ -160,6 +141,355 @@ SEED_AUTHOR_SUGGESTIONS = {
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ACADEMIC KEYWORD TAXONOMY
+# Rigorous mapping of research interests to semantic keyword clusters
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FIELD_KEYWORDS: Dict[str, Set[str]] = {
+    "Microeconomics": {
+        "microeconomic", "consumer", "producer", "demand", "supply", "equilibrium",
+        "utility", "preference", "choice", "optimization", "market", "price",
+        "elasticity", "welfare", "surplus", "efficiency", "allocation", "mechanism"
+    },
+    "Macroeconomics": {
+        "macroeconomic", "gdp", "growth", "inflation", "unemployment", "recession",
+        "business cycle", "aggregate", "monetary", "fiscal", "central bank",
+        "interest rate", "output", "consumption", "investment", "savings"
+    },
+    "Econometrics": {
+        "econometric", "estimation", "regression", "identification", "inference",
+        "estimator", "consistent", "unbiased", "heteroskedasticity", "autocorrelation",
+        "specification", "model selection", "bootstrap", "asymptotic"
+    },
+    "Labor Economics": {
+        "labor", "wage", "employment", "unemployment", "worker", "job",
+        "human capital", "education", "training", "skill", "occupation",
+        "minimum wage", "union", "collective bargaining", "discrimination",
+        "earnings", "income", "mobility", "search", "matching"
+    },
+    "Public Economics": {
+        "public", "tax", "taxation", "government", "fiscal", "spending",
+        "redistribution", "welfare", "social insurance", "public good",
+        "externality", "regulation", "public finance", "budget", "deficit"
+    },
+    "International Economics": {
+        "international", "trade", "export", "import", "tariff", "globalization",
+        "exchange rate", "currency", "capital flow", "foreign direct investment",
+        "comparative advantage", "trade policy", "protectionism", "wto"
+    },
+    "Development Economics": {
+        "development", "poverty", "developing country", "aid", "microfinance",
+        "rural", "agriculture", "infrastructure", "institution", "corruption",
+        "growth", "inequality", "health", "education", "nutrition"
+    },
+    "Financial Economics": {
+        "financial", "finance", "asset", "stock", "bond", "return", "risk",
+        "portfolio", "investment", "banking", "credit", "loan", "mortgage",
+        "interest rate", "yield", "market", "liquidity", "capital"
+    },
+    "Industrial Organization": {
+        "industrial organization", "firm", "market structure", "competition",
+        "monopoly", "oligopoly", "antitrust", "merger", "entry", "exit",
+        "pricing", "product differentiation", "vertical integration"
+    },
+    "Behavioral Economics": {
+        "behavioral", "psychology", "bias", "heuristic", "bounded rationality",
+        "prospect theory", "loss aversion", "time preference", "present bias",
+        "nudge", "framing", "anchoring", "overconfidence", "social preference"
+    },
+    "Health Economics": {
+        "health", "healthcare", "hospital", "physician", "insurance", "medicare",
+        "medicaid", "pharmaceutical", "drug", "mortality", "morbidity",
+        "disease", "treatment", "patient", "medical"
+    },
+    "Environmental Economics": {
+        "environmental", "climate", "carbon", "emission", "pollution", "energy",
+        "renewable", "sustainability", "conservation", "natural resource",
+        "cap and trade", "carbon tax", "externality", "green"
+    },
+    "Urban Economics": {
+        "urban", "city", "housing", "rent", "real estate", "land", "zoning",
+        "agglomeration", "spatial", "commute", "transportation", "neighborhood",
+        "gentrification", "segregation", "metropolitan"
+    },
+    "Economic History": {
+        "history", "historical", "long run", "persistence", "colonial",
+        "industrial revolution", "great depression", "institution", "slavery",
+        "war", "conflict", "demographic transition"
+    },
+    "Political Economy": {
+        "political economy", "institution", "democracy", "autocracy", "regime",
+        "voting", "election", "politician", "lobbying", "corruption",
+        "redistribution", "inequality", "conflict", "state capacity"
+    },
+    "Comparative Politics": {
+        "comparative", "cross-country", "regime", "democracy", "autocracy",
+        "institution", "parliament", "coalition", "party", "electoral system",
+        "federalism", "decentralization", "state building"
+    },
+    "International Relations": {
+        "international relations", "conflict", "war", "peace", "diplomacy",
+        "alliance", "treaty", "sanction", "nuclear", "security", "terrorism",
+        "cooperation", "international organization", "sovereignty"
+    },
+    "American Politics": {
+        "american politics", "congress", "senate", "house", "president",
+        "supreme court", "partisan", "republican", "democrat", "polarization",
+        "lobbying", "campaign", "primary", "electoral college"
+    },
+    "Political Theory": {
+        "political theory", "justice", "liberty", "equality", "rights",
+        "democracy", "legitimacy", "sovereignty", "social contract",
+        "deliberation", "normative", "ideology"
+    },
+    "Public Policy": {
+        "public policy", "policy evaluation", "implementation", "regulation",
+        "reform", "government program", "effectiveness", "cost-benefit",
+        "stakeholder", "agenda setting"
+    },
+    "Political Methodology": {
+        "methodology", "causal inference", "identification", "experiment",
+        "survey", "measurement", "text analysis", "machine learning",
+        "bayesian", "formal model"
+    },
+    "Security Studies": {
+        "security", "defense", "military", "war", "conflict", "terrorism",
+        "nuclear", "cyber", "intelligence", "strategy", "deterrence"
+    },
+    "Electoral Politics": {
+        "election", "voting", "voter", "turnout", "campaign", "candidate",
+        "party", "primary", "polling", "electoral", "ballot", "swing"
+    }
+}
+
+INTEREST_KEYWORDS: Dict[str, Set[str]] = {
+    "Causal Inference": {
+        "causal", "causality", "identification", "endogeneity", "exogenous",
+        "treatment effect", "counterfactual", "selection", "confounding",
+        "instrumental", "discontinuity", "difference-in-differences"
+    },
+    "Machine Learning/AI": {
+        "machine learning", "artificial intelligence", "neural network",
+        "deep learning", "prediction", "classification", "algorithm",
+        "random forest", "lasso", "regularization", "cross-validation"
+    },
+    "Field Experiments (RCTs)": {
+        "randomized", "rct", "experiment", "random assignment", "treatment",
+        "control group", "field experiment", "randomization", "intent to treat"
+    },
+    "Natural Experiments": {
+        "natural experiment", "quasi-experiment", "exogenous shock",
+        "discontinuity", "regression discontinuity", "instrumental variable",
+        "difference-in-differences", "event study"
+    },
+    "Structural Estimation": {
+        "structural", "estimation", "model", "parameter", "simulation",
+        "counterfactual", "welfare", "equilibrium", "dynamic"
+    },
+    "Theory/Mechanism Design": {
+        "theory", "mechanism design", "game theory", "equilibrium", "incentive",
+        "contract", "auction", "matching", "optimal", "strategic"
+    },
+    "Survey Experiments": {
+        "survey experiment", "conjoint", "vignette", "factorial", "survey",
+        "respondent", "treatment", "experimental"
+    },
+    "Policy Evaluation": {
+        "policy evaluation", "program evaluation", "impact", "effectiveness",
+        "cost-benefit", "welfare", "reform", "implementation"
+    },
+    "Inequality & Redistribution": {
+        "inequality", "redistribution", "income distribution", "wealth",
+        "gini", "top income", "bottom", "percentile", "mobility"
+    },
+    "Climate & Energy": {
+        "climate", "carbon", "emission", "energy", "renewable", "fossil fuel",
+        "temperature", "warming", "environmental", "green", "solar", "wind"
+    },
+    "Education Policy": {
+        "education", "school", "student", "teacher", "test score", "achievement",
+        "college", "university", "dropout", "graduation", "curriculum"
+    },
+    "Housing Markets": {
+        "housing", "house price", "rent", "mortgage", "homeowner", "real estate",
+        "foreclosure", "affordability", "zoning", "construction"
+    },
+    "Trade & Globalization": {
+        "trade", "globalization", "export", "import", "tariff", "outsourcing",
+        "supply chain", "multinational", "foreign", "comparative advantage"
+    },
+    "Monetary Policy": {
+        "monetary policy", "central bank", "federal reserve", "interest rate",
+        "inflation", "quantitative easing", "money supply", "liquidity"
+    },
+    "Fiscal Policy": {
+        "fiscal policy", "government spending", "tax", "budget", "deficit",
+        "debt", "stimulus", "austerity", "multiplier"
+    },
+    "Innovation & Technology": {
+        "innovation", "technology", "patent", "r&d", "research", "startup",
+        "entrepreneur", "productivity", "automation", "digital"
+    },
+    "Gender & Discrimination": {
+        "gender", "discrimination", "wage gap", "women", "female", "bias",
+        "diversity", "race", "racial", "minority", "affirmative action"
+    },
+    "Crime & Justice": {
+        "crime", "criminal", "police", "prison", "incarceration", "recidivism",
+        "sentencing", "justice", "law enforcement", "violence"
+    },
+    "Health & Healthcare": {
+        "health", "healthcare", "hospital", "insurance", "mortality",
+        "disease", "treatment", "physician", "patient", "medical"
+    },
+    "Immigration": {
+        "immigration", "immigrant", "migration", "refugee", "border",
+        "visa", "asylum", "deportation", "citizenship", "naturalization"
+    },
+    "Democratic Institutions": {
+        "democracy", "democratic", "institution", "constitution", "rule of law",
+        "checks and balances", "separation of powers", "accountability"
+    },
+    "Voting & Elections": {
+        "voting", "election", "voter", "turnout", "ballot", "electoral",
+        "campaign", "candidate", "polling", "swing voter"
+    },
+    "Conflict & Security": {
+        "conflict", "war", "violence", "peace", "security", "military",
+        "terrorism", "civil war", "interstate", "defense"
+    },
+    "Media & Information": {
+        "media", "news", "information", "social media", "misinformation",
+        "propaganda", "journalism", "press", "fake news", "polarization"
+    },
+    "Social Mobility": {
+        "mobility", "intergenerational", "upward mobility", "opportunity",
+        "socioeconomic", "class", "income mobility", "persistence"
+    },
+    "Poverty & Welfare": {
+        "poverty", "welfare", "social assistance", "food stamps", "snap",
+        "transfer", "safety net", "poor", "low income", "benefits"
+    },
+    "Regulation": {
+        "regulation", "deregulation", "regulatory", "compliance", "rule",
+        "standard", "enforcement", "agency", "policy"
+    }
+}
+
+METHOD_KEYWORDS: Dict[str, Set[str]] = {
+    "Difference-in-Differences": {
+        "difference-in-differences", "diff-in-diff", "did", "parallel trends",
+        "event study", "two-way fixed effects", "staggered", "treatment timing"
+    },
+    "Regression Discontinuity": {
+        "regression discontinuity", "rdd", "discontinuity", "cutoff", "threshold",
+        "running variable", "bandwidth", "local linear", "fuzzy rd", "sharp rd"
+    },
+    "Instrumental Variables": {
+        "instrumental variable", "iv", "instrument", "two-stage", "2sls",
+        "exclusion restriction", "first stage", "weak instrument"
+    },
+    "Randomized Controlled Trials": {
+        "randomized", "rct", "experiment", "random assignment", "treatment group",
+        "control group", "randomization", "experimental", "intent to treat"
+    },
+    "Structural Models": {
+        "structural model", "structural estimation", "equilibrium model",
+        "dynamic model", "simulation", "counterfactual simulation"
+    },
+    "Theoretical Models": {
+        "theoretical model", "theory", "formal model", "game theory",
+        "equilibrium", "mechanism", "optimal", "analytical"
+    },
+    "Machine Learning Methods": {
+        "machine learning", "lasso", "random forest", "neural network",
+        "causal forest", "double machine learning", "prediction", "cross-validation"
+    },
+    "Survey/Experimental Data": {
+        "survey", "survey data", "experimental data", "questionnaire",
+        "respondent", "sample", "response rate"
+    },
+    "Administrative Data": {
+        "administrative data", "register data", "tax records", "census",
+        "linked data", "population data", "registry"
+    },
+    "Time Series Analysis": {
+        "time series", "var", "arima", "cointegration", "granger causality",
+        "impulse response", "forecast", "autocorrelation"
+    },
+    "Panel Data Methods": {
+        "panel data", "fixed effects", "random effects", "within estimator",
+        "longitudinal", "repeated cross-section", "hausman test"
+    },
+    "Text Analysis/NLP": {
+        "text analysis", "nlp", "natural language", "topic model", "sentiment",
+        "word embedding", "text classification", "corpus"
+    },
+    "Network Analysis": {
+        "network", "graph", "centrality", "clustering", "social network",
+        "peer effects", "spillover", "contagion"
+    },
+    "Bayesian Methods": {
+        "bayesian", "prior", "posterior", "mcmc", "credible interval",
+        "hierarchical", "gibbs sampling"
+    },
+    "Qualitative Methods": {
+        "qualitative", "interview", "case study", "ethnography", "discourse",
+        "content analysis", "narrative", "interpretive"
+    },
+    "Case Studies": {
+        "case study", "single case", "comparative case", "process tracing",
+        "within-case", "cross-case"
+    },
+    "Process Tracing": {
+        "process tracing", "causal mechanism", "within-case", "diagnostic",
+        "smoking gun", "hoop test"
+    }
+}
+
+REGION_KEYWORDS: Dict[str, Set[str]] = {
+    "Global/Comparative": {"global", "cross-country", "international", "comparative", "world"},
+    "United States": {"united states", "us", "usa", "american", "federal"},
+    "European Union": {"european union", "eu", "europe", "european", "eurozone"},
+    "United Kingdom": {"united kingdom", "uk", "british", "england", "britain"},
+    "China": {"china", "chinese", "beijing", "shanghai"},
+    "India": {"india", "indian", "delhi", "mumbai"},
+    "Latin America": {"latin america", "brazil", "mexico", "argentina", "chile", "colombia"},
+    "Sub-Saharan Africa": {"africa", "african", "nigeria", "kenya", "south africa", "ethiopia"},
+    "Middle East & North Africa": {"middle east", "mena", "arab", "egypt", "iran", "turkey"},
+    "Southeast Asia": {"southeast asia", "indonesia", "vietnam", "thailand", "philippines"},
+    "Global South": {"developing", "global south", "emerging", "low income", "third world"},
+    "OECD Countries": {"oecd", "developed", "advanced economy", "high income"},
+    "Emerging Markets": {"emerging market", "brics", "developing economy"}
+}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# STOPWORDS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STOPWORDS: Set[str] = {
+    "a", "an", "the", "and", "or", "but", "if", "then", "else", "when",
+    "at", "by", "for", "with", "about", "against", "between", "into",
+    "through", "during", "before", "after", "above", "below", "to", "from",
+    "up", "down", "in", "out", "on", "off", "over", "under", "again",
+    "further", "once", "here", "there", "all", "each", "few", "more",
+    "most", "other", "some", "such", "no", "nor", "not", "only", "own",
+    "same", "so", "than", "too", "very", "can", "will", "just", "should",
+    "now", "also", "well", "even", "back", "much", "how", "where", "which",
+    "while", "who", "whom", "why", "what", "this", "that", "these", "those",
+    "am", "is", "are", "was", "were", "be", "been", "being", "have", "has",
+    "had", "having", "do", "does", "did", "doing", "would", "could", "might",
+    "must", "shall", "i", "me", "my", "myself", "we", "our", "ours", "ourselves",
+    "you", "your", "yours", "yourself", "he", "him", "his", "himself",
+    "she", "her", "hers", "herself", "it", "its", "itself", "they", "them",
+    "their", "theirs", "themselves", "paper", "study", "research", "analysis",
+    "result", "find", "show", "suggest", "examine", "investigate", "use",
+    "using", "based", "effect", "impact", "evidence", "data", "method"
+}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # DATA CLASSES
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -174,27 +504,31 @@ class UserProfile:
     seed_authors: List[str] = field(default_factory=list)
     methodological_lean: float = 0.5
     
-    def to_text(self) -> str:
-        """Convert profile to natural language for embedding."""
-        method_desc = "quantitative causal inference" if self.methodological_lean > 0.6 else \
-                      "qualitative and theoretical" if self.methodological_lean < 0.4 else \
-                      "mixed methods"
+    def get_keywords(self) -> Set[str]:
+        """Extract all relevant keywords from profile."""
+        keywords = set()
         
-        text = f"""
-        Research Profile:
-        - Career Stage: {self.academic_level}
-        - Primary Field: {self.primary_field}
-        - Research Interests: {', '.join(self.secondary_interests)}
-        - Preferred Methods: {', '.join(self.preferred_methodology)}
-        - Methodological Approach: {method_desc}
-        - Regional Focus: {self.regional_focus}
-        """
-        if self.seed_authors:
-            text += f"\n        - Follows work by: {', '.join(self.seed_authors)}"
-        return text.strip()
+        # Field keywords
+        if self.primary_field in FIELD_KEYWORDS:
+            keywords.update(FIELD_KEYWORDS[self.primary_field])
+        
+        # Interest keywords
+        for interest in self.secondary_interests:
+            if interest in INTEREST_KEYWORDS:
+                keywords.update(INTEREST_KEYWORDS[interest])
+        
+        # Method keywords
+        for method in self.preferred_methodology:
+            if method in METHOD_KEYWORDS:
+                keywords.update(METHOD_KEYWORDS[method])
+        
+        # Region keywords
+        if self.regional_focus in REGION_KEYWORDS:
+            keywords.update(REGION_KEYWORDS[self.regional_focus])
+        
+        return keywords
     
     def to_dict(self) -> dict:
-        """Convert to dictionary for serialization."""
         return {
             "academic_level": self.academic_level,
             "primary_field": self.primary_field,
@@ -206,490 +540,322 @@ class UserProfile:
         }
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# CONFIGURATION
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-class AIConfig:
-    """AI processing configuration."""
-    EMBEDDING_MODEL = "text-embedding-004"
-    GENERATION_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"]
-    DEFAULT_MODEL = "gemini-2.0-flash"
-    
-    BATCH_SIZE = 10
-    TOP_K_FOR_LLM = 15
-    TEMPERATURE = 0.15
-    MAX_OUTPUT_TOKENS = 4096
+@dataclass
+class MatchResult:
+    """Detailed matching result for a paper."""
+    relevance_score: float
+    field_score: float
+    interest_score: float
+    method_score: float
+    region_score: float
+    author_match: bool
+    matched_interests: List[str]
+    matched_methods: List[str]
+    matched_keywords: List[str]
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# GEMINI CLIENT
+# TEXT PROCESSING
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-class GeminiClient:
-    """Wrapper for google.genai SDK."""
-    
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.client = None
-        self.model_name = None
-        self._initialized = False
-        
-    def initialize(self) -> Tuple[bool, Optional[str]]:
-        """Initialize the client. Returns (success, error_message)."""
-        if not GENAI_AVAILABLE:
-            return False, "google-genai package not installed. Run: pip install google-genai"
-        
-        try:
-            self.client = genai.Client(api_key=self.api_key)
-            
-            # Test connection and find working model
-            for model_name in AIConfig.GENERATION_MODELS:
-                try:
-                    response = self.client.models.generate_content(
-                        model=model_name,
-                        contents="Reply with exactly: OK"
-                    )
-                    if response and response.text:
-                        self.model_name = model_name
-                        self._initialized = True
-                        return True, None
-                except Exception as e:
-                    error_str = str(e).upper()
-                    if "API_KEY" in error_str or "401" in error_str or "INVALID" in error_str:
-                        return False, "Invalid API key"
-                    elif "QUOTA" in error_str or "429" in error_str:
-                        return False, "API quota exceeded - wait a few minutes"
-                    continue
-            
-            return False, "No working Gemini model found"
-            
-        except Exception as e:
-            return False, f"Failed to initialize: {str(e)[:100]}"
-    
-    def generate(self, prompt: str, temperature: float = 0.15, max_tokens: int = 4096) -> Optional[str]:
-        """Generate text from prompt."""
-        if not self._initialized:
-            return None
-        
-        try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=temperature,
-                    max_output_tokens=max_tokens,
-                )
-            )
-            return response.text if response else None
-        except Exception as e:
-            logger.warning(f"Generation failed: {e}")
-            return None
-    
-    def embed(self, text: str) -> Optional[List[float]]:
-        """Get embedding for text."""
-        if not self._initialized:
-            return None
-        
-        try:
-            text = text[:8000]  # Truncate if too long
-            response = self.client.models.embed_content(
-                model=AIConfig.EMBEDDING_MODEL,
-                contents=text
-            )
-            if response and response.embeddings:
-                return list(response.embeddings[0].values)
-            return None
-        except Exception as e:
-            logger.warning(f"Embedding failed: {e}")
-            return None
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# VECTOR OPERATIONS
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-def cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
-    """Calculate cosine similarity between two vectors."""
-    if not vec_a or not vec_b or len(vec_a) != len(vec_b):
-        return 0.0
-    
-    dot_product = sum(a * b for a, b in zip(vec_a, vec_b))
-    magnitude_a = math.sqrt(sum(a * a for a in vec_a))
-    magnitude_b = math.sqrt(sum(b * b for b in vec_b))
-    
-    if magnitude_a == 0 or magnitude_b == 0:
-        return 0.0
-    
-    return dot_product / (magnitude_a * magnitude_b)
-
-
-def semantic_prerank_papers(
-    client: GeminiClient,
-    profile: UserProfile,
-    papers: List[dict],
-    top_k: int = AIConfig.TOP_K_FOR_LLM,
-    progress_callback: Optional[callable] = None
-) -> Tuple[List[dict], List[float]]:
-    """Pre-rank papers using semantic similarity to user profile."""
-    if progress_callback:
-        progress_callback("Computing profile embedding...")
-    
-    profile_embedding = client.embed(profile.to_text())
-    if not profile_embedding:
-        logger.warning("Could not embed profile - returning unranked papers")
-        return papers[:top_k], [0.5] * min(len(papers), top_k)
-    
-    scored_papers = []
-    
-    for i, paper in enumerate(papers):
-        if progress_callback and i % 5 == 0:
-            progress_callback(f"Embedding paper {i+1}/{len(papers)}...")
-        
-        paper_text = f"""
-        Title: {paper.get('title', '')}
-        Abstract: {paper.get('abstract', '')}
-        Journal: {paper.get('journal', '')}
-        """
-        
-        concepts = paper.get('concepts', [])
-        if concepts:
-            concept_names = [c.get('name', '') for c in concepts[:5]]
-            paper_text += f"\nTopics: {', '.join(concept_names)}"
-        
-        paper_embedding = client.embed(paper_text)
-        
-        if paper_embedding:
-            similarity = cosine_similarity(profile_embedding, paper_embedding)
-        else:
-            similarity = 0.5
-        
-        scored_papers.append((paper, similarity))
-    
-    scored_papers.sort(key=lambda x: x[1], reverse=True)
-    
-    ranked_papers = [p for p, _ in scored_papers[:top_k]]
-    scores = [s for _, s in scored_papers[:top_k]]
-    
-    if progress_callback:
-        progress_callback(f"Pre-ranked to top {len(ranked_papers)} papers")
-    
-    return ranked_papers, scores
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# LLM PROMPTS
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-def build_analysis_prompt(profile: UserProfile, papers: List[dict]) -> str:
-    """Build the prompt for Gemini to analyze and rank papers."""
-    method_desc = "quantitative and causal inference methods" if profile.methodological_lean > 0.6 else \
-                  "qualitative and theoretical approaches" if profile.methodological_lean < 0.4 else \
-                  "both quantitative and qualitative methods"
-    
-    profile_section = f"""
-RESEARCHER PROFILE:
-- Career Stage: {profile.academic_level}
-- Primary Field: {profile.primary_field}
-- Research Interests: {', '.join(profile.secondary_interests)}
-- Preferred Methods: {', '.join(profile.preferred_methodology)}
-- Methodological Preference: {method_desc}
-- Regional Focus: {profile.regional_focus}
-{"- Follows work by: " + ', '.join(profile.seed_authors) if profile.seed_authors else ""}
-"""
-    
-    papers_section = "\nPAPERS TO ANALYZE:\n"
-    
-    for i, paper in enumerate(papers, 1):
-        abstract = paper.get('abstract', '')[:1200]
-        concepts = paper.get('concepts', [])
-        concept_str = ', '.join([c.get('name', '') for c in concepts[:4]]) if concepts else "N/A"
-        
-        papers_section += f"""
-[PAPER {i}]
-Title: {paper.get('title', 'Unknown')}
-Journal: {paper.get('journal', 'Unknown')} | Cited: {paper.get('cited_by_count', 0)}
-Topics: {concept_str}
-Abstract: {abstract}
----
-"""
-    
-    instruction = """
-You are a Senior Research Editor. Evaluate these papers for the researcher above.
-
-For EACH paper, return a JSON object with:
-- paper_num: (integer) Paper number [1, 2, 3, ...]
-- score: (integer 1-10) Relevance: 9-10=essential, 7-8=highly relevant, 5-6=moderate, 3-4=marginal, 1-2=not relevant
-- summary: (string) One sentence: main contribution/finding
-- why_relevant: (string) One sentence: specific connection to their profile
-- method: (string) 2-4 words: methodology used
-- topic_matches: (array) Which of their interests this touches
-- method_matches: (array) Which of their preferred methods this uses
-
-Return ONLY a valid JSON array. No markdown, no explanations.
-
-Example: [{"paper_num": 1, "score": 8, "summary": "Finds X causes Y.", "why_relevant": "Uses DiD on education.", "method": "Difference-in-Differences", "topic_matches": ["Education Policy"], "method_matches": ["Difference-in-Differences"]}]
-"""
-    
-    return profile_section + papers_section + instruction
-
-
-def build_synthesis_prompt(profile: UserProfile, top_papers: List[dict]) -> str:
-    """Build prompt for synthesizing top paper recommendations."""
-    papers_text = ""
-    for i, paper in enumerate(top_papers[:3], 1):
-        papers_text += f"""
-Paper {i}: "{paper.get('title', 'Unknown')}"
-- Summary: {paper.get('ai_contribution', 'N/A')}
-- Why Relevant: {paper.get('ai_relevance', 'N/A')}
-"""
-    
-    return f"""
-Write a brief synthesis (3-4 sentences) explaining why these three papers are important 
-for a {profile.academic_level} in {profile.primary_field} interested in {', '.join(profile.secondary_interests[:3])}.
-
-{papers_text}
-
-Focus on how they connect to the researcher's agenda. Be specific and professional.
-"""
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# RESPONSE PARSING
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-def parse_gemini_response(response_text: str) -> List[dict]:
-    """Parse Gemini's JSON response with robust error handling."""
-    if not response_text:
+def tokenize(text: str) -> List[str]:
+    """Tokenize and clean text."""
+    if not text:
         return []
     
-    text = response_text.strip()
+    # Lowercase
+    text = text.lower()
     
-    # Remove markdown code blocks
-    text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.MULTILINE)
-    text = re.sub(r'\s*```$', '', text, flags=re.MULTILINE)
-    text = text.strip()
+    # Remove punctuation except hyphens (for terms like "difference-in-differences")
+    text = re.sub(r'[^\w\s-]', ' ', text)
     
-    # Find JSON array
-    json_match = re.search(r'\[\s*\{[\s\S]*\}\s*\]', text)
-    if json_match:
-        text = json_match.group()
+    # Split into tokens
+    tokens = text.split()
     
-    # Clean common JSON issues
-    text = text.replace('\n', ' ')
-    text = re.sub(r',\s*]', ']', text)
-    text = re.sub(r',\s*}', '}', text)
+    # Filter stopwords and short tokens
+    tokens = [t for t in tokens if t not in STOPWORDS and len(t) > 2]
     
-    try:
-        result = json.loads(text)
-        if isinstance(result, list):
-            return result
-        elif isinstance(result, dict):
-            return [result]
-    except json.JSONDecodeError:
-        pass
+    return tokens
+
+
+def compute_tf(tokens: List[str]) -> Dict[str, float]:
+    """Compute term frequency (TF) for tokens."""
+    if not tokens:
+        return {}
     
-    # Fallback: extract individual objects
-    objects = []
-    pattern = r'\{\s*"paper_num"\s*:\s*\d+[^}]*\}'
-    matches = re.findall(pattern, text, re.DOTALL)
+    counts = Counter(tokens)
+    total = len(tokens)
     
-    for match in matches:
-        try:
-            clean = re.sub(r',\s*}', '}', match)
-            obj = json.loads(clean)
-            objects.append(obj)
-        except:
-            continue
+    return {term: count / total for term, count in counts.items()}
+
+
+def compute_idf(documents: List[List[str]]) -> Dict[str, float]:
+    """Compute inverse document frequency (IDF) across documents."""
+    if not documents:
+        return {}
     
-    return objects
+    n_docs = len(documents)
+    doc_freq = Counter()
+    
+    for doc in documents:
+        unique_terms = set(doc)
+        for term in unique_terms:
+            doc_freq[term] += 1
+    
+    idf = {}
+    for term, df in doc_freq.items():
+        idf[term] = math.log(n_docs / (1 + df)) + 1  # Smoothed IDF
+    
+    return idf
+
+
+def compute_tfidf(tf: Dict[str, float], idf: Dict[str, float]) -> Dict[str, float]:
+    """Compute TF-IDF scores."""
+    return {term: tf_val * idf.get(term, 1.0) for term, tf_val in tf.items()}
+
+
+def cosine_similarity(vec_a: Dict[str, float], vec_b: Dict[str, float]) -> float:
+    """Compute cosine similarity between two sparse vectors."""
+    if not vec_a or not vec_b:
+        return 0.0
+    
+    # Find common terms
+    common_terms = set(vec_a.keys()) & set(vec_b.keys())
+    
+    if not common_terms:
+        return 0.0
+    
+    # Compute dot product
+    dot_product = sum(vec_a[t] * vec_b[t] for t in common_terms)
+    
+    # Compute magnitudes
+    mag_a = math.sqrt(sum(v ** 2 for v in vec_a.values()))
+    mag_b = math.sqrt(sum(v ** 2 for v in vec_b.values()))
+    
+    if mag_a == 0 or mag_b == 0:
+        return 0.0
+    
+    return dot_product / (mag_a * mag_b)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# MAIN PROCESSING FUNCTION
+# MATCHING ENGINE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def process_papers_with_gemini(
-    api_key: str,
-    user_profile: UserProfile,
-    papers: List[dict],
-    use_semantic_prerank: bool = True,
-    progress_callback: Optional[callable] = None
-) -> Tuple[List[dict], List[str], Optional[str]]:
+class SemanticMatcher:
     """
-    Process papers through semantic pre-ranking and Gemini analysis.
+    Gold-standard semantic matching engine using TF-IDF and cosine similarity.
     
-    Returns:
-        Tuple of (enriched_papers, status_messages, synthesis)
+    Scoring weights:
+    - Field match: 30%
+    - Interest match: 35%
+    - Method match: 25%
+    - Region match: 10%
+    
+    Bonus: +0.5 for author match, journal tier boost
     """
-    messages = []
-    synthesis = None
     
-    if not GENAI_AVAILABLE:
-        messages.append("⚠️ AI SDK not available - install google-genai")
-        return _fallback_processing(papers), messages, None
+    FIELD_WEIGHT = 0.30
+    INTEREST_WEIGHT = 0.35
+    METHOD_WEIGHT = 0.25
+    REGION_WEIGHT = 0.10
     
-    if not api_key:
-        messages.append("⚠️ No API key provided")
-        return _fallback_processing(papers), messages, None
+    AUTHOR_BONUS = 0.5
+    TIER_BONUS = {1: 0.3, 2: 0.15, 3: 0.05, 4: 0.0}
     
-    if not papers:
-        return [], ["No papers to process"], None
+    def __init__(self, profile: UserProfile):
+        self.profile = profile
+        self.profile_keywords = profile.get_keywords()
+        self.idf: Dict[str, float] = {}
     
-    # Initialize client
-    client = GeminiClient(api_key)
-    success, error = client.initialize()
-    
-    if not success:
-        messages.append(f"⚠️ {error}")
-        return _fallback_processing(papers), messages, None
-    
-    messages.append(f"🤖 Using {client.model_name}")
-    
-    # Semantic pre-ranking
-    if use_semantic_prerank and len(papers) > AIConfig.TOP_K_FOR_LLM:
-        if progress_callback:
-            progress_callback("🧠 Computing semantic similarity...")
+    def _keyword_overlap_score(
+        self, 
+        text_tokens: Set[str], 
+        keyword_set: Set[str]
+    ) -> Tuple[float, List[str]]:
+        """Calculate overlap between text tokens and keyword set."""
+        if not keyword_set:
+            return 0.0, []
         
-        try:
-            preranked_papers, similarity_scores = semantic_prerank_papers(
-                client, user_profile, papers,
-                top_k=AIConfig.TOP_K_FOR_LLM,
-                progress_callback=progress_callback
-            )
-            
-            for paper, score in zip(preranked_papers, similarity_scores):
-                paper['semantic_similarity'] = score
-            
-            messages.append(f"📊 Pre-ranked {len(papers)} → top {len(preranked_papers)}")
-            papers_for_llm = preranked_papers
-            
-        except Exception as e:
-            logger.warning(f"Semantic pre-ranking failed: {e}")
-            messages.append("⚠️ Semantic ranking failed")
-            papers_for_llm = papers[:AIConfig.TOP_K_FOR_LLM]
-    else:
-        papers_for_llm = papers[:AIConfig.TOP_K_FOR_LLM]
-    
-    # Process with LLM
-    results_by_index = {}
-    total_batches = (len(papers_for_llm) + AIConfig.BATCH_SIZE - 1) // AIConfig.BATCH_SIZE
-    
-    for batch_num in range(total_batches):
-        start_idx = batch_num * AIConfig.BATCH_SIZE
-        end_idx = min(start_idx + AIConfig.BATCH_SIZE, len(papers_for_llm))
-        batch = papers_for_llm[start_idx:end_idx]
+        # Check for multi-word matches
+        text_str = " ".join(text_tokens)
+        matches = []
         
-        if progress_callback:
-            progress_callback(f"🔬 Analyzing batch {batch_num + 1}/{total_batches}...")
-        
-        prompt = build_analysis_prompt(user_profile, batch)
-        
-        try:
-            response_text = client.generate(
-                prompt,
-                temperature=AIConfig.TEMPERATURE,
-                max_tokens=AIConfig.MAX_OUTPUT_TOKENS
-            )
-            
-            if not response_text:
-                messages.append(f"⚠️ Batch {batch_num + 1}: Empty response")
-                continue
-            
-            rankings = parse_gemini_response(response_text)
-            
-            if not rankings:
-                messages.append(f"⚠️ Batch {batch_num + 1}: Parse error")
-                continue
-            
-            for ranking in rankings:
-                paper_num = ranking.get("paper_num")
-                if paper_num is not None:
-                    global_idx = start_idx + paper_num - 1
-                    if 0 <= global_idx < len(papers_for_llm):
-                        results_by_index[global_idx] = ranking
-                        
-        except Exception as e:
-            error_msg = str(e)
-            if "API_KEY" in error_msg.upper() or "401" in error_msg:
-                messages.append("⚠️ Invalid API key")
-                break
-            elif "QUOTA" in error_msg.upper() or "429" in error_msg:
-                messages.append("⚠️ Quota exceeded")
-                break
+        for keyword in keyword_set:
+            if " " in keyword:
+                # Multi-word keyword
+                if keyword in text_str:
+                    matches.append(keyword)
             else:
-                messages.append(f"⚠️ Batch {batch_num + 1}: Error")
-            continue
-    
-    # Build enriched papers
-    enriched_papers = []
-    analyzed_count = 0
-    
-    for idx, paper in enumerate(papers_for_llm):
-        ranking = results_by_index.get(idx, {})
-        has_analysis = bool(ranking.get("summary"))
+                # Single word keyword
+                if keyword in text_tokens:
+                    matches.append(keyword)
         
-        if has_analysis:
-            analyzed_count += 1
+        if not matches:
+            return 0.0, []
         
-        enriched = {
-            **paper,
-            "relevance_score": ranking.get("score", 5),
-            "ai_contribution": ranking.get("summary", ""),
-            "ai_relevance": ranking.get("why_relevant", ""),
-            "ai_methodology": ranking.get("method", ""),
-            "topic_matches": ranking.get("topic_matches", []),
-            "method_matches": ranking.get("method_matches", []),
-            "has_ai_analysis": has_analysis,
-            "semantic_similarity": paper.get("semantic_similarity", 0.5)
-        }
-        enriched_papers.append(enriched)
+        # Jaccard-style score with boost for more matches
+        score = min(1.0, len(matches) / max(3, len(keyword_set) * 0.2))
+        return score, matches
     
-    enriched_papers.sort(
-        key=lambda x: (x.get("has_ai_analysis", False), x.get("relevance_score", 0)),
-        reverse=True
-    )
+    def _compute_field_score(self, paper_tokens: Set[str]) -> Tuple[float, List[str]]:
+        """Compute field match score."""
+        field_keywords = FIELD_KEYWORDS.get(self.profile.primary_field, set())
+        return self._keyword_overlap_score(paper_tokens, field_keywords)
     
-    # Generate synthesis
-    if analyzed_count >= 3:
-        if progress_callback:
-            progress_callback("📝 Generating synthesis...")
+    def _compute_interest_scores(self, paper_tokens: Set[str]) -> Tuple[float, List[str]]:
+        """Compute interest match score across all user interests."""
+        all_matches = []
+        total_score = 0.0
         
-        try:
-            synthesis_prompt = build_synthesis_prompt(user_profile, enriched_papers[:3])
-            synthesis = client.generate(synthesis_prompt, temperature=0.3, max_tokens=500)
-            if synthesis:
-                synthesis = synthesis.strip()
-        except Exception as e:
-            logger.warning(f"Synthesis failed: {e}")
+        for interest in self.profile.secondary_interests:
+            interest_keywords = INTEREST_KEYWORDS.get(interest, set())
+            score, matches = self._keyword_overlap_score(paper_tokens, interest_keywords)
+            if matches:
+                all_matches.append(interest)
+                total_score += score
+        
+        if not self.profile.secondary_interests:
+            return 0.0, []
+        
+        avg_score = total_score / len(self.profile.secondary_interests)
+        return min(1.0, avg_score * 1.5), all_matches  # Boost for having matches
     
-    # Final status
-    if analyzed_count == 0:
-        messages.insert(0, f"⚠️ Analysis failed for all papers")
-    elif analyzed_count < len(papers_for_llm):
-        messages.insert(0, f"✓ Analyzed {analyzed_count}/{len(papers_for_llm)} papers")
-    else:
-        messages.insert(0, f"✓ Analyzed all {analyzed_count} papers")
+    def _compute_method_scores(self, paper_tokens: Set[str]) -> Tuple[float, List[str]]:
+        """Compute methodology match score."""
+        all_matches = []
+        total_score = 0.0
+        
+        for method in self.profile.preferred_methodology:
+            method_keywords = METHOD_KEYWORDS.get(method, set())
+            score, matches = self._keyword_overlap_score(paper_tokens, method_keywords)
+            if matches:
+                all_matches.append(method)
+                total_score += score
+        
+        if not self.profile.preferred_methodology:
+            return 0.0, []
+        
+        avg_score = total_score / len(self.profile.preferred_methodology)
+        return min(1.0, avg_score * 1.5), all_matches
     
-    return enriched_papers, messages, synthesis
-
-
-def _fallback_processing(papers: List[dict]) -> List[dict]:
-    """Fallback when AI isn't available."""
-    return [
-        {
-            **paper,
-            "relevance_score": 5,
-            "ai_contribution": "",
-            "ai_relevance": "",
-            "ai_methodology": "",
-            "topic_matches": [],
-            "method_matches": [],
-            "has_ai_analysis": False,
-            "semantic_similarity": 0.5
-        }
-        for paper in papers
-    ]
+    def _compute_region_score(self, paper_tokens: Set[str]) -> float:
+        """Compute regional focus match score."""
+        region_keywords = REGION_KEYWORDS.get(self.profile.regional_focus, set())
+        score, _ = self._keyword_overlap_score(paper_tokens, region_keywords)
+        return score
+    
+    def _check_author_match(self, paper_authors: List[str]) -> bool:
+        """Check if any seed author matches paper authors."""
+        if not self.profile.seed_authors:
+            return False
+        
+        paper_authors_lower = {a.lower() for a in paper_authors}
+        seed_authors_lower = {a.lower() for a in self.profile.seed_authors}
+        
+        for seed in seed_authors_lower:
+            for author in paper_authors_lower:
+                if seed in author or author in seed:
+                    return True
+        return False
+    
+    def match_paper(self, paper: dict) -> MatchResult:
+        """
+        Compute comprehensive match result for a single paper.
+        """
+        # Prepare text
+        title = paper.get("title", "")
+        abstract = paper.get("abstract", "")
+        full_text = f"{title} {abstract}"
+        
+        # Add concept names
+        concepts = paper.get("concepts", [])
+        concept_text = " ".join(c.get("name", "") for c in concepts)
+        full_text = f"{full_text} {concept_text}"
+        
+        # Tokenize
+        tokens = tokenize(full_text)
+        token_set = set(tokens)
+        
+        # Compute component scores
+        field_score, field_matches = self._compute_field_score(token_set)
+        interest_score, matched_interests = self._compute_interest_scores(token_set)
+        method_score, matched_methods = self._compute_method_scores(token_set)
+        region_score = self._compute_region_score(token_set)
+        
+        # Check author match
+        author_match = self._check_author_match(paper.get("authors", []))
+        
+        # Compute weighted score
+        base_score = (
+            self.FIELD_WEIGHT * field_score +
+            self.INTEREST_WEIGHT * interest_score +
+            self.METHOD_WEIGHT * method_score +
+            self.REGION_WEIGHT * region_score
+        )
+        
+        # Apply bonuses
+        if author_match:
+            base_score += self.AUTHOR_BONUS
+        
+        journal_tier = paper.get("journal_tier", 4)
+        base_score += self.TIER_BONUS.get(journal_tier, 0)
+        
+        # Normalize to 1-10 scale
+        relevance_score = min(10.0, max(1.0, base_score * 10))
+        
+        # Get matched keywords for display
+        matched_keywords = field_matches[:5]
+        
+        return MatchResult(
+            relevance_score=round(relevance_score, 1),
+            field_score=round(field_score, 2),
+            interest_score=round(interest_score, 2),
+            method_score=round(method_score, 2),
+            region_score=round(region_score, 2),
+            author_match=author_match,
+            matched_interests=matched_interests,
+            matched_methods=matched_methods,
+            matched_keywords=matched_keywords
+        )
+    
+    def rank_papers(
+        self, 
+        papers: List[dict],
+        progress_callback: Optional[callable] = None
+    ) -> List[dict]:
+        """
+        Rank all papers by relevance to user profile.
+        
+        Returns papers enriched with match data, sorted by relevance.
+        """
+        enriched_papers = []
+        
+        for i, paper in enumerate(papers):
+            if progress_callback and i % 5 == 0:
+                progress_callback(f"Analyzing paper {i+1}/{len(papers)}...")
+            
+            match_result = self.match_paper(paper)
+            
+            enriched = {
+                **paper,
+                "relevance_score": match_result.relevance_score,
+                "field_score": match_result.field_score,
+                "interest_score": match_result.interest_score,
+                "method_score": match_result.method_score,
+                "region_score": match_result.region_score,
+                "author_match": match_result.author_match,
+                "topic_matches": match_result.matched_interests,
+                "method_matches": match_result.matched_methods,
+                "matched_keywords": match_result.matched_keywords,
+                "has_match_data": True
+            }
+            enriched_papers.append(enriched)
+        
+        # Sort by relevance score
+        enriched_papers.sort(key=lambda x: x["relevance_score"], reverse=True)
+        
+        return enriched_papers
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -717,6 +883,37 @@ def create_user_profile(
     )
 
 
+def process_papers(
+    user_profile: UserProfile,
+    papers: List[dict],
+    progress_callback: Optional[callable] = None
+) -> Tuple[List[dict], List[str]]:
+    """
+    Process papers using semantic matching.
+    
+    Returns:
+        Tuple of (enriched_papers, status_messages)
+    """
+    messages = []
+    
+    if not papers:
+        return [], ["No papers to process"]
+    
+    matcher = SemanticMatcher(user_profile)
+    
+    if progress_callback:
+        progress_callback("🔬 Computing semantic matches...")
+    
+    enriched_papers = matcher.rank_papers(papers, progress_callback)
+    
+    # Generate summary stats
+    high_relevance = sum(1 for p in enriched_papers if p["relevance_score"] >= 7)
+    messages.append(f"✓ Analyzed {len(papers)} papers")
+    messages.append(f"📊 {high_relevance} high-relevance matches found")
+    
+    return enriched_papers, messages
+
+
 @lru_cache(maxsize=1)
 def get_profile_options() -> dict:
     """Return all available options for building a user profile."""
@@ -727,15 +924,6 @@ def get_profile_options() -> dict:
         "methodologies": METHODOLOGIES,
         "regional_focus": REGIONAL_FOCUS,
         "seed_author_suggestions": SEED_AUTHOR_SUGGESTIONS
-    }
-
-
-def get_sdk_info() -> dict:
-    """Return information about SDK availability."""
-    return {
-        "available": GENAI_AVAILABLE,
-        "default_model": AIConfig.DEFAULT_MODEL,
-        "embedding_model": AIConfig.EMBEDDING_MODEL,
     }
 
 
