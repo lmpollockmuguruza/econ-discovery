@@ -3,6 +3,8 @@ AI Processor for Literature Discovery
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Production-grade semantic search with vector embeddings,
 intelligent pre-ranking, and optimized LLM analysis.
+
+Updated to use new google.genai SDK
 """
 
 import json
@@ -18,12 +20,19 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # SDK availability
+GENAI_AVAILABLE = False
+genai = None
+types = None
+
 try:
-    import google.generativeai as genai
+    from google import genai as google_genai
+    from google.genai import types as genai_types
+    genai = google_genai
+    types = genai_types
     GENAI_AVAILABLE = True
+    logger.info("google.genai SDK loaded successfully")
 except ImportError:
-    GENAI_AVAILABLE = False
-    genai = None
+    logger.warning("google.genai SDK not available")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -46,7 +55,6 @@ ACADEMIC_LEVELS = [
 ]
 
 PRIMARY_FIELDS = [
-    # Economics
     "Microeconomics",
     "Macroeconomics",
     "Econometrics",
@@ -61,7 +69,6 @@ PRIMARY_FIELDS = [
     "Environmental Economics",
     "Urban Economics",
     "Economic History",
-    # Political Science
     "Political Economy",
     "Comparative Politics",
     "International Relations",
@@ -74,7 +81,6 @@ PRIMARY_FIELDS = [
 ]
 
 SECONDARY_INTERESTS = [
-    # Methods
     "Causal Inference",
     "Machine Learning/AI",
     "Field Experiments (RCTs)",
@@ -82,7 +88,6 @@ SECONDARY_INTERESTS = [
     "Structural Estimation",
     "Theory/Mechanism Design",
     "Survey Experiments",
-    # Topics
     "Policy Evaluation",
     "Inequality & Redistribution",
     "Climate & Energy",
@@ -141,7 +146,6 @@ REGIONAL_FOCUS = [
     "Emerging Markets"
 ]
 
-# Prominent researchers by field for seed author suggestions
 SEED_AUTHOR_SUGGESTIONS = {
     "Labor Economics": ["David Card", "Raj Chetty", "Lawrence Katz", "Claudia Goldin", "David Autor"],
     "Development Economics": ["Esther Duflo", "Abhijit Banerjee", "Michael Kremer", "Nathan Nunn"],
@@ -168,7 +172,7 @@ class UserProfile:
     preferred_methodology: List[str]
     regional_focus: str = "Global/Comparative"
     seed_authors: List[str] = field(default_factory=list)
-    methodological_lean: float = 0.5  # 0=Qualitative, 1=Quantitative
+    methodological_lean: float = 0.5
     
     def to_text(self) -> str:
         """Convert profile to natural language for embedding."""
@@ -202,39 +206,103 @@ class UserProfile:
         }
 
 
-@dataclass
-class PaperAnalysis:
-    """AI analysis result for a paper."""
-    paper_id: str
-    relevance_score: int
-    summary: str
-    why_relevant: str
-    methodology: str
-    topic_matches: List[str] = field(default_factory=list)
-    method_matches: List[str] = field(default_factory=list)
-    semantic_similarity: float = 0.0
-
-
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # CONFIGURATION
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class AIConfig:
     """AI processing configuration."""
-    EMBEDDING_MODEL = "models/embedding-001"
-    GENERATION_MODELS = [
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
-    ]
+    EMBEDDING_MODEL = "text-embedding-004"
+    GENERATION_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"]
     DEFAULT_MODEL = "gemini-2.0-flash"
     
-    BATCH_SIZE = 10  # Papers per LLM call
-    TOP_K_FOR_LLM = 15  # Top semantic matches to send to LLM
-    EMBEDDING_DIMENSION = 768
-    
+    BATCH_SIZE = 10
+    TOP_K_FOR_LLM = 15
     TEMPERATURE = 0.15
     MAX_OUTPUT_TOKENS = 4096
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GEMINI CLIENT
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class GeminiClient:
+    """Wrapper for google.genai SDK."""
+    
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.client = None
+        self.model_name = None
+        self._initialized = False
+        
+    def initialize(self) -> Tuple[bool, Optional[str]]:
+        """Initialize the client. Returns (success, error_message)."""
+        if not GENAI_AVAILABLE:
+            return False, "google-genai package not installed. Run: pip install google-genai"
+        
+        try:
+            self.client = genai.Client(api_key=self.api_key)
+            
+            # Test connection and find working model
+            for model_name in AIConfig.GENERATION_MODELS:
+                try:
+                    response = self.client.models.generate_content(
+                        model=model_name,
+                        contents="Reply with exactly: OK"
+                    )
+                    if response and response.text:
+                        self.model_name = model_name
+                        self._initialized = True
+                        return True, None
+                except Exception as e:
+                    error_str = str(e).upper()
+                    if "API_KEY" in error_str or "401" in error_str or "INVALID" in error_str:
+                        return False, "Invalid API key"
+                    elif "QUOTA" in error_str or "429" in error_str:
+                        return False, "API quota exceeded - wait a few minutes"
+                    continue
+            
+            return False, "No working Gemini model found"
+            
+        except Exception as e:
+            return False, f"Failed to initialize: {str(e)[:100]}"
+    
+    def generate(self, prompt: str, temperature: float = 0.15, max_tokens: int = 4096) -> Optional[str]:
+        """Generate text from prompt."""
+        if not self._initialized:
+            return None
+        
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=temperature,
+                    max_output_tokens=max_tokens,
+                )
+            )
+            return response.text if response else None
+        except Exception as e:
+            logger.warning(f"Generation failed: {e}")
+            return None
+    
+    def embed(self, text: str) -> Optional[List[float]]:
+        """Get embedding for text."""
+        if not self._initialized:
+            return None
+        
+        try:
+            text = text[:8000]  # Truncate if too long
+            response = self.client.models.embed_content(
+                model=AIConfig.EMBEDDING_MODEL,
+                contents=text
+            )
+            if response and response.embeddings:
+                return list(response.embeddings[0].values)
+            return None
+        except Exception as e:
+            logger.warning(f"Embedding failed: {e}")
+            return None
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -242,11 +310,7 @@ class AIConfig:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
-    """
-    Calculate cosine similarity between two vectors.
-    
-    Returns value between -1 and 1, where 1 is identical.
-    """
+    """Calculate cosine similarity between two vectors."""
     if not vec_a or not vec_b or len(vec_a) != len(vec_b):
         return 0.0
     
@@ -260,116 +324,50 @@ def cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
     return dot_product / (magnitude_a * magnitude_b)
 
 
-def get_embedding(text: str, model_name: str = AIConfig.EMBEDDING_MODEL) -> Optional[List[float]]:
-    """
-    Get embedding vector for text using Gemini embedding model.
-    
-    Returns None if embedding fails.
-    """
-    if not GENAI_AVAILABLE or not text:
-        return None
-    
-    try:
-        # Truncate text if too long (embedding model limit ~2048 tokens)
-        text = text[:8000]
-        
-        result = genai.embed_content(
-            model=model_name,
-            content=text,
-            task_type="retrieval_document"
-        )
-        return result.get("embedding")
-    except Exception as e:
-        logger.warning(f"Embedding failed: {e}")
-        return None
-
-
-def batch_get_embeddings(
-    texts: List[str],
-    model_name: str = AIConfig.EMBEDDING_MODEL
-) -> List[Optional[List[float]]]:
-    """
-    Get embeddings for multiple texts efficiently.
-    """
-    embeddings = []
-    for text in texts:
-        embedding = get_embedding(text, model_name)
-        embeddings.append(embedding)
-    return embeddings
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# SEMANTIC PRE-RANKING
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 def semantic_prerank_papers(
+    client: GeminiClient,
     profile: UserProfile,
     papers: List[dict],
     top_k: int = AIConfig.TOP_K_FOR_LLM,
     progress_callback: Optional[callable] = None
 ) -> Tuple[List[dict], List[float]]:
-    """
-    Pre-rank papers using semantic similarity to user profile.
-    
-    This reduces the number of papers sent to the LLM, saving tokens
-    and improving relevance.
-    
-    Args:
-        profile: User research profile
-        papers: List of paper dictionaries
-        top_k: Number of top papers to return
-        progress_callback: Optional callback(message)
-    
-    Returns:
-        Tuple of (ranked_papers, similarity_scores)
-    """
-    if not GENAI_AVAILABLE:
-        logger.warning("Embeddings unavailable - returning unranked papers")
-        return papers[:top_k], [0.5] * min(len(papers), top_k)
-    
+    """Pre-rank papers using semantic similarity to user profile."""
     if progress_callback:
         progress_callback("Computing profile embedding...")
     
-    # Get profile embedding
-    profile_embedding = get_embedding(profile.to_text())
+    profile_embedding = client.embed(profile.to_text())
     if not profile_embedding:
         logger.warning("Could not embed profile - returning unranked papers")
         return papers[:top_k], [0.5] * min(len(papers), top_k)
     
-    # Score each paper
     scored_papers = []
     
     for i, paper in enumerate(papers):
         if progress_callback and i % 5 == 0:
             progress_callback(f"Embedding paper {i+1}/{len(papers)}...")
         
-        # Create paper text for embedding
         paper_text = f"""
         Title: {paper.get('title', '')}
         Abstract: {paper.get('abstract', '')}
         Journal: {paper.get('journal', '')}
         """
         
-        # Add concepts if available
         concepts = paper.get('concepts', [])
         if concepts:
             concept_names = [c.get('name', '') for c in concepts[:5]]
             paper_text += f"\nTopics: {', '.join(concept_names)}"
         
-        # Get paper embedding
-        paper_embedding = get_embedding(paper_text)
+        paper_embedding = client.embed(paper_text)
         
         if paper_embedding:
             similarity = cosine_similarity(profile_embedding, paper_embedding)
         else:
-            similarity = 0.5  # Neutral score if embedding fails
+            similarity = 0.5
         
         scored_papers.append((paper, similarity))
     
-    # Sort by similarity (descending)
     scored_papers.sort(key=lambda x: x[1], reverse=True)
     
-    # Return top k
     ranked_papers = [p for p, _ in scored_papers[:top_k]]
     scores = [s for _, s in scored_papers[:top_k]]
     
@@ -384,33 +382,26 @@ def semantic_prerank_papers(
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def build_analysis_prompt(profile: UserProfile, papers: List[dict]) -> str:
-    """
-    Build the prompt for Gemini to analyze and rank papers.
-    
-    Uses "Senior Research Editor" persona for high-quality analysis.
-    """
+    """Build the prompt for Gemini to analyze and rank papers."""
     method_desc = "quantitative and causal inference methods" if profile.methodological_lean > 0.6 else \
                   "qualitative and theoretical approaches" if profile.methodological_lean < 0.4 else \
                   "both quantitative and qualitative methods"
     
     profile_section = f"""
-═══════════════════════════════════════════════════════════════
-RESEARCHER PROFILE
-═══════════════════════════════════════════════════════════════
-• Career Stage: {profile.academic_level}
-• Primary Field: {profile.primary_field}
-• Research Interests: {', '.join(profile.secondary_interests)}
-• Preferred Methods: {', '.join(profile.preferred_methodology)}
-• Methodological Preference: {method_desc}
-• Regional Focus: {profile.regional_focus}
-{"• Follows work by: " + ', '.join(profile.seed_authors) if profile.seed_authors else ""}
-═══════════════════════════════════════════════════════════════
+RESEARCHER PROFILE:
+- Career Stage: {profile.academic_level}
+- Primary Field: {profile.primary_field}
+- Research Interests: {', '.join(profile.secondary_interests)}
+- Preferred Methods: {', '.join(profile.preferred_methodology)}
+- Methodological Preference: {method_desc}
+- Regional Focus: {profile.regional_focus}
+{"- Follows work by: " + ', '.join(profile.seed_authors) if profile.seed_authors else ""}
 """
     
-    papers_section = "\nPAPERS TO ANALYZE:\n" + "─" * 60 + "\n"
+    papers_section = "\nPAPERS TO ANALYZE:\n"
     
     for i, paper in enumerate(papers, 1):
-        abstract = paper.get('abstract', '')[:1200]  # Limit abstract length
+        abstract = paper.get('abstract', '')[:1200]
         concepts = paper.get('concepts', [])
         concept_str = ', '.join([c.get('name', '') for c in concepts[:4]]) if concepts else "N/A"
         
@@ -420,99 +411,55 @@ Title: {paper.get('title', 'Unknown')}
 Journal: {paper.get('journal', 'Unknown')} | Cited: {paper.get('cited_by_count', 0)}
 Topics: {concept_str}
 Abstract: {abstract}
-─────────────────────────────────────────────────────────────
+---
 """
     
     instruction = """
-You are a Senior Research Editor at a top academic journal. Your task is to evaluate 
-these papers for a researcher with the profile above.
+You are a Senior Research Editor. Evaluate these papers for the researcher above.
 
-For EACH paper, provide a JSON object with:
-- paper_num: (integer) The paper number [1, 2, 3, ...]
-- score: (integer 1-10) Relevance score where:
-  • 9-10: Essential reading - directly advances their research agenda
-  • 7-8: Highly relevant - strong methodological or topical match
-  • 5-6: Moderately relevant - tangential connection
-  • 3-4: Marginally relevant - weak connection
-  • 1-2: Not relevant - outside their interests
-- summary: (string) One clear sentence: the paper's main contribution/finding
-- why_relevant: (string) One sentence explaining the specific connection to their profile
-- method: (string) 2-4 words describing the methodology
-- topic_matches: (array of strings) Which of their interests this paper touches
-- method_matches: (array of strings) Which of their preferred methods this paper uses
+For EACH paper, return a JSON object with:
+- paper_num: (integer) Paper number [1, 2, 3, ...]
+- score: (integer 1-10) Relevance: 9-10=essential, 7-8=highly relevant, 5-6=moderate, 3-4=marginal, 1-2=not relevant
+- summary: (string) One sentence: main contribution/finding
+- why_relevant: (string) One sentence: specific connection to their profile
+- method: (string) 2-4 words: methodology used
+- topic_matches: (array) Which of their interests this touches
+- method_matches: (array) Which of their preferred methods this uses
 
-CRITICAL: Return ONLY a valid JSON array. No markdown, no explanations, no preamble.
+Return ONLY a valid JSON array. No markdown, no explanations.
 
-Example format:
-[{"paper_num": 1, "score": 8, "summary": "Finds that X causes Y using a natural experiment.", "why_relevant": "Uses difference-in-differences on education policy, matching your labor economics focus.", "method": "Difference-in-Differences", "topic_matches": ["Education Policy", "Causal Inference"], "method_matches": ["Difference-in-Differences"]}]
+Example: [{"paper_num": 1, "score": 8, "summary": "Finds X causes Y.", "why_relevant": "Uses DiD on education.", "method": "Difference-in-Differences", "topic_matches": ["Education Policy"], "method_matches": ["Difference-in-Differences"]}]
 """
     
     return profile_section + papers_section + instruction
 
 
 def build_synthesis_prompt(profile: UserProfile, top_papers: List[dict]) -> str:
-    """
-    Build prompt for synthesizing top paper recommendations.
-    """
+    """Build prompt for synthesizing top paper recommendations."""
     papers_text = ""
     for i, paper in enumerate(top_papers[:3], 1):
         papers_text += f"""
 Paper {i}: "{paper.get('title', 'Unknown')}"
 - Summary: {paper.get('ai_contribution', 'N/A')}
 - Why Relevant: {paper.get('ai_relevance', 'N/A')}
-- Method: {paper.get('ai_methodology', 'N/A')}
 """
     
     return f"""
-As a Senior Research Editor, write a brief synthesis (3-4 sentences) explaining why 
-these three papers are the most important for a {profile.academic_level} focused on 
-{profile.primary_field} with interests in {', '.join(profile.secondary_interests[:3])}.
+Write a brief synthesis (3-4 sentences) explaining why these three papers are important 
+for a {profile.academic_level} in {profile.primary_field} interested in {', '.join(profile.secondary_interests[:3])}.
 
 {papers_text}
 
-Focus on how these papers connect to each other and to the researcher's agenda.
-Write in a professional, editorial voice. Be specific about methodological innovations
-or empirical findings that make these essential reading.
+Focus on how they connect to the researcher's agenda. Be specific and professional.
 """
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# LLM PROCESSING
+# RESPONSE PARSING
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def _find_working_model() -> Tuple[Optional[Any], Optional[str], Optional[str]]:
-    """
-    Find a working Gemini model.
-    
-    Returns:
-        Tuple of (model_instance, model_name, error_message)
-    """
-    if not GENAI_AVAILABLE:
-        return None, None, "google-generativeai package not installed"
-    
-    for model_name in AIConfig.GENERATION_MODELS:
-        try:
-            model = genai.GenerativeModel(model_name)
-            # Quick test
-            test_response = model.generate_content("Reply with: OK")
-            if test_response.text:
-                return model, model_name, None
-        except Exception as e:
-            error_str = str(e).upper()
-            if "API_KEY" in error_str or "401" in error_str:
-                return None, None, "Invalid API key"
-            elif "QUOTA" in error_str or "429" in error_str:
-                return None, None, "API quota exceeded - wait a few minutes"
-            # Try next model
-            continue
-    
-    return None, None, "No working Gemini model found"
-
-
 def parse_gemini_response(response_text: str) -> List[dict]:
-    """
-    Parse Gemini's JSON response with robust error handling.
-    """
+    """Parse Gemini's JSON response with robust error handling."""
     if not response_text:
         return []
     
@@ -558,6 +505,10 @@ def parse_gemini_response(response_text: str) -> List[dict]:
     return objects
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# MAIN PROCESSING FUNCTION
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 def process_papers_with_gemini(
     api_key: str,
     user_profile: UserProfile,
@@ -568,13 +519,6 @@ def process_papers_with_gemini(
     """
     Process papers through semantic pre-ranking and Gemini analysis.
     
-    Args:
-        api_key: Gemini API key
-        user_profile: User's research profile
-        papers: List of paper dictionaries
-        use_semantic_prerank: Whether to use embedding-based pre-ranking
-        progress_callback: Optional callback(message)
-    
     Returns:
         Tuple of (enriched_papers, status_messages, synthesis)
     """
@@ -582,7 +526,7 @@ def process_papers_with_gemini(
     synthesis = None
     
     if not GENAI_AVAILABLE:
-        messages.append("⚠️ AI SDK not available")
+        messages.append("⚠️ AI SDK not available - install google-genai")
         return _fallback_processing(papers), messages, None
     
     if not api_key:
@@ -592,52 +536,42 @@ def process_papers_with_gemini(
     if not papers:
         return [], ["No papers to process"], None
     
-    # Configure API
-    try:
-        genai.configure(api_key=api_key)
-    except Exception as e:
-        messages.append(f"⚠️ API configuration failed: {str(e)[:50]}")
+    # Initialize client
+    client = GeminiClient(api_key)
+    success, error = client.initialize()
+    
+    if not success:
+        messages.append(f"⚠️ {error}")
         return _fallback_processing(papers), messages, None
     
-    # Step 1: Semantic pre-ranking (if enabled)
+    messages.append(f"🤖 Using {client.model_name}")
+    
+    # Semantic pre-ranking
     if use_semantic_prerank and len(papers) > AIConfig.TOP_K_FOR_LLM:
         if progress_callback:
             progress_callback("🧠 Computing semantic similarity...")
         
         try:
             preranked_papers, similarity_scores = semantic_prerank_papers(
-                user_profile,
-                papers,
+                client, user_profile, papers,
                 top_k=AIConfig.TOP_K_FOR_LLM,
                 progress_callback=progress_callback
             )
             
-            # Store similarity scores
             for paper, score in zip(preranked_papers, similarity_scores):
                 paper['semantic_similarity'] = score
             
-            messages.append(f"📊 Pre-ranked {len(papers)} → top {len(preranked_papers)} by semantic match")
+            messages.append(f"📊 Pre-ranked {len(papers)} → top {len(preranked_papers)}")
             papers_for_llm = preranked_papers
             
         except Exception as e:
             logger.warning(f"Semantic pre-ranking failed: {e}")
-            messages.append(f"⚠️ Semantic ranking failed, using all papers")
+            messages.append("⚠️ Semantic ranking failed")
             papers_for_llm = papers[:AIConfig.TOP_K_FOR_LLM]
     else:
         papers_for_llm = papers[:AIConfig.TOP_K_FOR_LLM]
     
-    # Step 2: Find working model
-    if progress_callback:
-        progress_callback("🔍 Connecting to Gemini...")
-    
-    model, model_name, error = _find_working_model()
-    if error:
-        messages.append(f"⚠️ {error}")
-        return _fallback_processing(papers), messages, None
-    
-    messages.append(f"🤖 Using {model_name}")
-    
-    # Step 3: Process papers with LLM
+    # Process with LLM
     results_by_index = {}
     total_batches = (len(papers_for_llm) + AIConfig.BATCH_SIZE - 1) // AIConfig.BATCH_SIZE
     
@@ -652,27 +586,22 @@ def process_papers_with_gemini(
         prompt = build_analysis_prompt(user_profile, batch)
         
         try:
-            response = model.generate_content(
+            response_text = client.generate(
                 prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=AIConfig.TEMPERATURE,
-                    max_output_tokens=AIConfig.MAX_OUTPUT_TOKENS,
-                )
+                temperature=AIConfig.TEMPERATURE,
+                max_tokens=AIConfig.MAX_OUTPUT_TOKENS
             )
             
-            if not response.text:
+            if not response_text:
                 messages.append(f"⚠️ Batch {batch_num + 1}: Empty response")
                 continue
             
-            rankings = parse_gemini_response(response.text)
+            rankings = parse_gemini_response(response_text)
             
             if not rankings:
-                preview = response.text[:100].replace('\n', ' ')
                 messages.append(f"⚠️ Batch {batch_num + 1}: Parse error")
-                logger.warning(f"Could not parse: {preview}...")
                 continue
             
-            # Match results to papers
             for ranking in rankings:
                 paper_num = ranking.get("paper_num")
                 if paper_num is not None:
@@ -686,13 +615,13 @@ def process_papers_with_gemini(
                 messages.append("⚠️ Invalid API key")
                 break
             elif "QUOTA" in error_msg.upper() or "429" in error_msg:
-                messages.append("⚠️ Quota exceeded - try again later")
+                messages.append("⚠️ Quota exceeded")
                 break
             else:
-                messages.append(f"⚠️ Batch {batch_num + 1}: {str(e)[:50]}")
+                messages.append(f"⚠️ Batch {batch_num + 1}: Error")
             continue
     
-    # Step 4: Build enriched paper list
+    # Build enriched papers
     enriched_papers = []
     analyzed_count = 0
     
@@ -716,43 +645,37 @@ def process_papers_with_gemini(
         }
         enriched_papers.append(enriched)
     
-    # Sort by relevance
     enriched_papers.sort(
         key=lambda x: (x.get("has_ai_analysis", False), x.get("relevance_score", 0)),
         reverse=True
     )
     
-    # Step 5: Generate synthesis for top papers
+    # Generate synthesis
     if analyzed_count >= 3:
         if progress_callback:
             progress_callback("📝 Generating synthesis...")
         
         try:
             synthesis_prompt = build_synthesis_prompt(user_profile, enriched_papers[:3])
-            synth_response = model.generate_content(
-                synthesis_prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.3,
-                    max_output_tokens=500,
-                )
-            )
-            synthesis = synth_response.text.strip() if synth_response.text else None
+            synthesis = client.generate(synthesis_prompt, temperature=0.3, max_tokens=500)
+            if synthesis:
+                synthesis = synthesis.strip()
         except Exception as e:
-            logger.warning(f"Synthesis generation failed: {e}")
+            logger.warning(f"Synthesis failed: {e}")
     
     # Final status
     if analyzed_count == 0:
-        messages.insert(0, f"⚠️ Analysis failed for all {len(papers_for_llm)} papers")
+        messages.insert(0, f"⚠️ Analysis failed for all papers")
     elif analyzed_count < len(papers_for_llm):
         messages.insert(0, f"✓ Analyzed {analyzed_count}/{len(papers_for_llm)} papers")
     else:
-        messages.insert(0, f"✓ Successfully analyzed all {analyzed_count} papers")
+        messages.insert(0, f"✓ Analyzed all {analyzed_count} papers")
     
     return enriched_papers, messages, synthesis
 
 
 def _fallback_processing(papers: List[dict]) -> List[dict]:
-    """Fallback when AI isn't available - returns papers with neutral scores."""
+    """Fallback when AI isn't available."""
     return [
         {
             **paper,
@@ -813,7 +736,6 @@ def get_sdk_info() -> dict:
         "available": GENAI_AVAILABLE,
         "default_model": AIConfig.DEFAULT_MODEL,
         "embedding_model": AIConfig.EMBEDDING_MODEL,
-        "supports_embeddings": GENAI_AVAILABLE
     }
 
 
