@@ -1,13 +1,12 @@
 """
-Literature Discovery — Premium Research Assistant
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-A refined interface for discovering relevant academic papers,
-designed with minimalist aesthetics and intelligent personalization.
+Literature Discovery — Research Paper Matching
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+A refined interface for discovering relevant academic papers
+using semantic keyword matching.
 """
 
 import streamlit as st
 from datetime import datetime
-from typing import Optional, List
 import time
 
 from api_client import (
@@ -19,322 +18,157 @@ from api_client import (
     OpenAlexError
 )
 from processor import (
-    process_papers_with_gemini,
+    process_papers,
     create_user_profile,
     get_profile_options,
-    get_sdk_info,
-    get_suggested_authors,
-    UserProfile
+    get_suggested_authors
 )
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PAGE CONFIGURATION
+# PAGE CONFIG
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 st.set_page_config(
     page_title="Literature Discovery",
-    page_icon="◉",
+    page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PREMIUM CSS
+# CSS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=DM+Sans:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600&family=DM+Sans:wght@400;500;600;700&display=swap');
     
-    :root {
-        --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-        --font-serif: 'Source Serif 4', Georgia, serif;
-        --bg-primary: #FAFAFA;
-        --bg-card: #FFFFFF;
-        --bg-elevated: #F5F5F7;
-        --text-primary: #1D1D1F;
-        --text-secondary: #6E6E73;
-        --text-tertiary: #86868B;
-        --accent: #0071E3;
-        --success: #34C759;
-        --warning: #FF9500;
-        --border: #D2D2D7;
-        --border-light: #E8E8ED;
-        --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
-        --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
-        --radius-sm: 8px;
-        --radius-md: 12px;
-        --radius-lg: 16px;
-    }
-    
-    .stApp { background-color: var(--bg-primary); }
-    html, body, [class*="css"] {
-        font-family: var(--font-sans);
-        color: var(--text-primary);
-    }
-    
-    #MainMenu, footer, header {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
     .stDeployButton {display: none;}
     
-    .wizard-progress {
-        display: flex;
-        justify-content: center;
-        gap: 24px;
-        padding: 40px 0;
-        margin-bottom: 40px;
+    .block-container {
+        padding-top: 2rem;
     }
     
-    .wizard-step {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        color: var(--text-tertiary);
-        font-size: 14px;
-        font-weight: 500;
+    h1, h2, h3, h4, h5, h6, p, span, div, label {
+        font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
     
-    .wizard-step.active { color: var(--text-primary); }
-    .wizard-step.completed { color: var(--success); }
-    
-    .step-number {
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 600;
-        font-size: 13px;
-        background: var(--bg-elevated);
-        border: 2px solid var(--border);
-    }
-    
-    .wizard-step.active .step-number {
-        background: var(--text-primary);
-        color: white;
-        border-color: var(--text-primary);
-    }
-    
-    .wizard-step.completed .step-number {
-        background: var(--success);
-        color: white;
-        border-color: var(--success);
-    }
-    
-    .step-line {
-        width: 60px;
-        height: 2px;
-        background: var(--border);
-    }
-    
-    .step-line.completed { background: var(--success); }
-    
-    .hero {
+    .hero-box {
         text-align: center;
-        padding: 64px 40px;
-        max-width: 700px;
+        padding: 2.5rem 1rem 1.5rem 1rem;
+    }
+    
+    .hero-title {
+        font-family: 'Source Serif 4', Georgia, serif !important;
+        font-size: 2.5rem;
+        font-weight: 600;
+        color: #1a1a2e;
+        margin-bottom: 0.5rem;
+    }
+    
+    .hero-sub {
+        font-size: 1.05rem;
+        color: #666;
+        max-width: 500px;
         margin: 0 auto;
     }
     
-    .hero h1 {
-        font-family: var(--font-serif);
-        font-size: 48px;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-        margin-bottom: 16px;
-        color: var(--text-primary);
-    }
-    
-    .hero p {
-        font-size: 18px;
-        color: var(--text-secondary);
-        line-height: 1.6;
-    }
-    
-    .config-card {
-        background: var(--bg-card);
-        border-radius: var(--radius-lg);
-        padding: 40px;
-        box-shadow: var(--shadow-sm);
-        border: 1px solid var(--border-light);
-        margin-bottom: 24px;
-    }
-    
-    .match-card {
-        background: var(--bg-card);
-        border-radius: var(--radius-lg);
-        padding: 24px;
-        margin-bottom: 16px;
-        border: 1px solid var(--border-light);
-        transition: all 0.2s ease;
-    }
-    
-    .match-card:hover {
-        box-shadow: var(--shadow-md);
-        border-color: var(--border);
-    }
-    
-    .match-card h4 {
-        font-family: var(--font-serif);
-        font-size: 18px;
-        font-weight: 600;
-        line-height: 1.4;
-        color: var(--text-primary);
-        margin: 0 0 12px 0;
-    }
-    
-    .relevance-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 6px 12px;
-        border-radius: 20px;
-        font-size: 14px;
-        font-weight: 600;
-        white-space: nowrap;
-    }
-    
-    .relevance-high { background: #E8F5E9; color: #2E7D32; }
-    .relevance-medium { background: #FFF3E0; color: #E65100; }
-    .relevance-low { background: var(--bg-elevated); color: var(--text-tertiary); }
-    
-    .match-meta {
-        font-size: 13px;
-        color: var(--text-secondary);
-        margin-bottom: 16px;
-    }
-    
-    .match-summary {
-        font-size: 15px;
-        line-height: 1.6;
-        color: var(--text-primary);
-        margin-bottom: 16px;
-        padding-left: 16px;
-        border-left: 3px solid var(--accent);
-    }
-    
-    .match-relevance {
-        background: var(--bg-elevated);
-        padding: 16px;
-        border-radius: var(--radius-md);
-        font-size: 14px;
-        color: var(--text-secondary);
-        margin-bottom: 16px;
-    }
-    
-    .match-relevance strong { color: var(--text-primary); }
-    
-    .pill-container {
+    .step-bar {
         display: flex;
+        justify-content: center;
+        gap: 0.75rem;
+        margin: 1.5rem 0;
         flex-wrap: wrap;
-        gap: 8px;
-        margin-top: 8px;
     }
     
-    .pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-size: 12px;
+    .step-pill {
+        padding: 0.4rem 1rem;
+        border-radius: 2rem;
+        font-size: 0.85rem;
         font-weight: 500;
     }
     
-    .pill-method { background: #E3F2FD; color: #1565C0; }
-    .pill-topic { background: #F3E5F5; color: #7B1FA2; }
-    .pill-oa { background: #E8F5E9; color: #2E7D32; }
-    .pill-journal { background: var(--bg-elevated); color: var(--text-secondary); }
+    .step-done { background: #198754; color: white; }
+    .step-now { background: #1a1a2e; color: white; }
+    .step-wait { background: #e9ecef; color: #6c757d; }
     
-    .stButton > button {
-        font-family: var(--font-sans);
+    .score-pill {
+        display: inline-block;
+        padding: 0.3rem 0.7rem;
+        border-radius: 1rem;
+        font-size: 0.85rem;
         font-weight: 600;
-        border-radius: var(--radius-md);
-        padding: 12px 24px;
     }
     
-    .stButton > button[kind="primary"] {
-        background: var(--text-primary);
-        color: white;
-        border: none;
+    .score-high { background: #d1e7dd; color: #0f5132; }
+    .score-med { background: #fff3cd; color: #664d03; }
+    .score-low { background: #e9ecef; color: #6c757d; }
+    
+    .tag-box { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.5rem; }
+    
+    .tag {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        border-radius: 1rem;
+        font-size: 0.7rem;
+        font-weight: 500;
     }
     
-    .stButton > button[kind="primary"]:hover {
-        background: #333;
+    .tag-method { background: #cfe2ff; color: #084298; }
+    .tag-topic { background: #e2d9f3; color: #432874; }
+    .tag-oa { background: #d1e7dd; color: #0f5132; }
+    .tag-tier { background: #fff3cd; color: #664d03; }
+    
+    .match-hint {
+        background: #f8f9fa;
+        border-left: 3px solid #0d6efd;
+        padding: 0.6rem 0.8rem;
+        margin: 0.5rem 0;
+        border-radius: 0 6px 6px 0;
+        font-size: 0.8rem;
+        color: #495057;
     }
     
-    .synthesis-box {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: var(--radius-lg);
-        padding: 40px;
-        color: white;
-        margin-bottom: 40px;
-    }
-    
-    .synthesis-box h3 {
-        font-family: var(--font-serif);
-        font-size: 20px;
-        font-weight: 600;
-        margin-bottom: 16px;
-    }
-    
-    .synthesis-box p {
-        font-size: 15px;
-        line-height: 1.7;
-        opacity: 0.95;
-    }
-    
-    .metric-row {
+    .metric-grid {
         display: flex;
-        gap: 16px;
-        margin-bottom: 40px;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
     }
     
-    .metric-box {
+    .metric-card {
         flex: 1;
-        background: var(--bg-card);
-        border-radius: var(--radius-md);
-        padding: 24px;
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        padding: 1rem;
         text-align: center;
-        border: 1px solid var(--border-light);
     }
     
-    .metric-value {
-        font-size: 32px;
+    .metric-num {
+        font-size: 1.75rem;
         font-weight: 700;
-        color: var(--text-primary);
+        color: #1a1a2e;
     }
     
-    .metric-label {
-        font-size: 13px;
-        color: var(--text-tertiary);
+    .metric-txt {
+        font-size: 0.7rem;
+        color: #6c757d;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        margin-top: 4px;
     }
     
-    .status-success {
-        background: #E8F5E9;
-        color: #2E7D32;
-        padding: 16px;
-        border-radius: var(--radius-md);
-        font-size: 14px;
-    }
-    
-    .status-warning {
-        background: #FFF3E0;
-        color: #E65100;
-        padding: 16px;
-        border-radius: var(--radius-md);
-        font-size: 14px;
-    }
-    
-    @media (max-width: 768px) {
-        .hero h1 { font-size: 32px; }
-        .wizard-progress { flex-wrap: wrap; }
-        .step-line { width: 30px; }
+    .success-msg {
+        background: #d1e7dd;
+        color: #0f5132;
+        padding: 0.6rem 1rem;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        margin-bottom: 1rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -344,582 +178,359 @@ st.markdown("""
 # SESSION STATE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def init_session_state():
-    """Initialize all session state variables."""
+def init_state():
     defaults = {
-        "wizard_step": 1,
-        "processed_papers": [],
-        "status_messages": [],
-        "synthesis": None,
-        "user_profile": None,
-        "api_key": "",
-        "w_academic_level": "PhD Student (ABD)",
-        "w_primary_field": "Labor Economics",
-        "w_interests": ["Causal Inference"],
-        "w_methods": ["Difference-in-Differences"],
-        "w_region": "United States",
-        "w_method_lean": 0.7,
-        "w_seed_authors": [],
-        "w_journals": [],
-        "w_days_back": 30,
-        "w_max_papers": 20,
+        "step": 1,
+        "papers": [],
+        "messages": [],
+        "profile": None,
+        "academic_level": "PhD Student (ABD)",
+        "primary_field": "Labor Economics",
+        "interests": ["Causal Inference"],
+        "methods": ["Difference-in-Differences"],
+        "region": "United States",
+        "method_lean": 0.7,
+        "seed_authors": [],
+        "journals": [],
+        "days_back": 30,
+        "max_papers": 25,
     }
-    
-    for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
 
-init_session_state()
+init_state()
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# CACHED FUNCTIONS
+# CACHE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def cached_fetch_papers(journals_tuple: tuple, days_back: int, max_papers: int):
-    """Cached paper fetching."""
-    return fetch_recent_papers(
-        days_back=days_back,
-        selected_journals=list(journals_tuple),
-        max_results=max_papers
-    )
-
+def fetch_papers_cached(journals_tuple, days, max_p):
+    return fetch_recent_papers(days_back=days, selected_journals=list(journals_tuple), max_results=max_p)
 
 @st.cache_resource
-def get_cached_options():
-    """Cache profile options."""
+def get_options():
     return get_profile_options()
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# HELPER FUNCTIONS
+# HELPERS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def format_date(date_str: str) -> str:
-    """Format date string for display."""
-    if not date_str:
+def fmt_date(d):
+    if not d:
         return "Unknown"
     try:
-        return datetime.strptime(date_str, "%Y-%m-%d").strftime("%b %d, %Y")
+        return datetime.strptime(d, "%Y-%m-%d").strftime("%b %d, %Y")
     except:
-        return date_str
+        return d
 
 
-def render_wizard_progress(current_step: int):
-    """Render the step progress indicator."""
-    steps = ["Profile", "Interests", "Sources", "Discover"]
-    
-    html = '<div class="wizard-progress">'
-    for i, step in enumerate(steps, 1):
-        status = "completed" if i < current_step else "active" if i == current_step else ""
-        check = "✓" if i < current_step else str(i)
-        
-        html += f'''
-        <div class="wizard-step {status}">
-            <div class="step-number">{check}</div>
-            <span>{step}</span>
-        </div>
-        '''
-        if i < len(steps):
-            line_status = "completed" if i < current_step else ""
-            html += f'<div class="step-line {line_status}"></div>'
-    
+def show_steps(current):
+    steps = ["Profile", "Interests", "Sources", "Results"]
+    html = '<div class="step-bar">'
+    for i, s in enumerate(steps, 1):
+        if i < current:
+            cls = "step-done"
+            txt = f"✓ {s}"
+        elif i == current:
+            cls = "step-now"
+            txt = f"{i}. {s}"
+        else:
+            cls = "step-wait"
+            txt = f"{i}. {s}"
+        html += f'<span class="step-pill {cls}">{txt}</span>'
     html += '</div>'
     st.markdown(html, unsafe_allow_html=True)
 
 
-def render_match_card(paper: dict, index: int):
-    """Render a paper result as a match card."""
-    score = paper.get("relevance_score", 5)
-    has_ai = paper.get("has_ai_analysis", False)
-    
-    if not has_ai:
-        rel_class = "relevance-low"
-        rel_icon = "○"
-    elif score >= 8:
-        rel_class = "relevance-high"
-        rel_icon = "●"
-    elif score >= 5:
-        rel_class = "relevance-medium"
-        rel_icon = "◐"
+def show_paper(p, rank):
+    score = p.get("relevance_score", 5)
+    if score >= 7:
+        sc, si = "score-high", "●"
+    elif score >= 4:
+        sc, si = "score-med", "◐"
     else:
-        rel_class = "relevance-low"
-        rel_icon = "○"
+        sc, si = "score-low", "○"
     
-    authors = paper.get("authors", [])
-    author_str = ", ".join(authors[:3])
+    authors = p.get("authors", [])
+    auth_str = ", ".join(authors[:3])
     if len(authors) > 3:
-        author_str += " et al."
+        auth_str += f" +{len(authors)-3}"
     
-    pills_html = '<div class="pill-container">'
-    
-    for method in paper.get("method_matches", [])[:2]:
-        pills_html += f'<span class="pill pill-method">⚙ {method}</span>'
-    
-    for topic in paper.get("topic_matches", [])[:2]:
-        pills_html += f'<span class="pill pill-topic">◆ {topic}</span>'
-    
-    if paper.get("is_open_access"):
-        pills_html += '<span class="pill pill-oa">🔓 Open Access</span>'
-    
-    tier = paper.get("journal_tier", 4)
+    tags = '<div class="tag-box">'
+    for m in p.get("method_matches", [])[:2]:
+        tags += f'<span class="tag tag-method">⚙ {m}</span>'
+    for t in p.get("topic_matches", [])[:2]:
+        tags += f'<span class="tag tag-topic">◆ {t}</span>'
+    if p.get("is_open_access"):
+        tags += '<span class="tag tag-oa">🔓 Open</span>'
+    tier = p.get("journal_tier", 4)
     if tier == 1:
-        pills_html += '<span class="pill pill-journal">★ Top Journal</span>'
+        tags += '<span class="tag tag-tier">★ Top 5</span>'
+    elif tier == 2:
+        tags += '<span class="tag tag-tier">★ Field</span>'
+    if p.get("author_match"):
+        tags += '<span class="tag tag-topic">👤 Author</span>'
+    tags += '</div>'
     
-    pills_html += '</div>'
+    hints = []
+    if p.get("field_score", 0) > 0.3:
+        hints.append("Field match")
+    if p.get("topic_matches"):
+        hints.append(f"Topics: {', '.join(p['topic_matches'][:2])}")
+    if p.get("method_matches"):
+        hints.append(f"Methods: {', '.join(p['method_matches'][:2])}")
+    hint_txt = " • ".join(hints) if hints else "General relevance"
     
     with st.container():
-        col1, col2 = st.columns([5, 1])
-        with col1:
-            st.markdown(f"**{paper.get('title', 'Untitled')}**")
-        with col2:
-            st.markdown(f'<span class="relevance-badge {rel_class}">{rel_icon} {score}/10</span>', unsafe_allow_html=True)
+        c1, c2 = st.columns([6, 1])
+        with c1:
+            st.markdown(f"**{rank}. {p.get('title', 'Untitled')}**")
+        with c2:
+            st.markdown(f'<span class="score-pill {sc}">{si} {score:.1f}</span>', unsafe_allow_html=True)
         
-        st.caption(f"{paper.get('journal', 'Unknown')} · {author_str} · {format_date(paper.get('publication_date'))}")
+        st.caption(f"📖 {p.get('journal', 'Unknown')} · 👤 {auth_str} · 📅 {fmt_date(p.get('publication_date'))} · 📊 {p.get('cited_by_count', 0)} cites")
         
-        if has_ai and paper.get("ai_contribution"):
-            st.markdown(f"""<div class="match-summary">{paper.get('ai_contribution', '')}</div>""", unsafe_allow_html=True)
+        abstract = p.get("abstract", "")
+        if abstract:
+            with st.expander("Abstract"):
+                st.write(abstract)
         
-        if has_ai and paper.get("ai_relevance"):
-            st.markdown(f"""<div class="match-relevance"><strong>Why it matches:</strong> {paper.get('ai_relevance', '')}</div>""", unsafe_allow_html=True)
+        st.markdown(f'<div class="match-hint">💡 {hint_txt}</div>', unsafe_allow_html=True)
+        st.markdown(tags, unsafe_allow_html=True)
         
-        st.markdown(pills_html, unsafe_allow_html=True)
-        
-        link = paper.get("doi_url") or paper.get("oa_url")
+        link = p.get("doi_url") or p.get("oa_url")
         if link:
-            st.markdown(f"[Read Paper →]({link})")
+            st.markdown(f"[Read paper →]({link})")
         
         st.divider()
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# WIZARD STEPS
+# STEPS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def render_step_1_profile():
-    """Step 1: Basic profile setup."""
-    options = get_cached_options()
+def step1():
+    opts = get_options()
     
-    st.markdown("""
-    <div class="hero">
-        <h1>Tell us about yourself</h1>
-        <p>We'll personalize your paper recommendations based on your research focus and career stage.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="hero-box"><div class="hero-title">Tell us about yourself</div><div class="hero-sub">We\'ll match papers to your research profile</div></div>', unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        st.markdown("##### 🔑 API Key")
-        api_key = st.text_input(
-            "Gemini API Key",
-            type="password",
-            value=st.session_state.api_key,
-            placeholder="Paste your Gemini API key",
-            help="[Get a free key →](https://aistudio.google.com/app/apikey)"
-        )
-        st.session_state.api_key = api_key
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        st.markdown("#### 👤 Career Stage")
+        st.session_state.academic_level = st.selectbox("Level", opts["academic_levels"], index=opts["academic_levels"].index(st.session_state.academic_level) if st.session_state.academic_level in opts["academic_levels"] else 3, label_visibility="collapsed")
         
-        if api_key:
-            if len(api_key) >= 30:
-                st.success("✓ Key looks valid")
-            else:
-                st.warning("Key seems short")
+        st.markdown("#### 📚 Primary Field")
+        st.session_state.primary_field = st.selectbox("Field", opts["primary_fields"], index=opts["primary_fields"].index(st.session_state.primary_field) if st.session_state.primary_field in opts["primary_fields"] else 3, label_visibility="collapsed")
         
-        st.divider()
+        st.markdown("#### 🌍 Regional Focus")
+        st.session_state.region = st.selectbox("Region", opts["regional_focus"], index=opts["regional_focus"].index(st.session_state.region) if st.session_state.region in opts["regional_focus"] else 0, label_visibility="collapsed")
         
-        st.markdown("##### 👤 Career Stage")
-        academic_level = st.selectbox(
-            "Academic Level",
-            options=options["academic_levels"],
-            index=options["academic_levels"].index(st.session_state.w_academic_level) 
-                  if st.session_state.w_academic_level in options["academic_levels"] else 3,
-            label_visibility="collapsed"
-        )
-        st.session_state.w_academic_level = academic_level
-        
-        st.markdown("##### 📚 Primary Field")
-        primary_field = st.selectbox(
-            "Primary Field",
-            options=options["primary_fields"],
-            index=options["primary_fields"].index(st.session_state.w_primary_field)
-                  if st.session_state.w_primary_field in options["primary_fields"] else 3,
-            label_visibility="collapsed"
-        )
-        st.session_state.w_primary_field = primary_field
-        
-        st.markdown("##### 🌍 Regional Focus")
-        region = st.selectbox(
-            "Region",
-            options=options["regional_focus"],
-            index=options["regional_focus"].index(st.session_state.w_region)
-                  if st.session_state.w_region in options["regional_focus"] else 0,
-            label_visibility="collapsed"
-        )
-        st.session_state.w_region = region
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        col_a, col_b = st.columns([1, 1])
-        with col_b:
+        st.markdown("")
+        _, bc = st.columns([1, 1])
+        with bc:
             if st.button("Continue →", type="primary", use_container_width=True):
-                if not api_key:
-                    st.error("Please enter your Gemini API key")
-                else:
-                    st.session_state.wizard_step = 2
-                    st.rerun()
-
-
-def render_step_2_interests():
-    """Step 2: Research interests and methodology."""
-    options = get_cached_options()
-    
-    st.markdown("""
-    <div class="hero">
-        <h1>Your research interests</h1>
-        <p>Help us understand what topics and methods matter most to you.</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        st.markdown("##### 🎯 Research Interests")
-        st.caption("Select up to 5 topics")
-        interests = st.multiselect(
-            "Interests",
-            options=options["secondary_interests"],
-            default=st.session_state.w_interests,
-            max_selections=5,
-            label_visibility="collapsed"
-        )
-        st.session_state.w_interests = interests
-        
-        st.divider()
-        
-        st.markdown("##### ⚙️ Preferred Methods")
-        st.caption("Select up to 4 methodologies")
-        methods = st.multiselect(
-            "Methods",
-            options=options["methodologies"],
-            default=st.session_state.w_methods,
-            max_selections=4,
-            label_visibility="collapsed"
-        )
-        st.session_state.w_methods = methods
-        
-        st.divider()
-        
-        st.markdown("##### 📊 Methodological Leaning")
-        method_lean = st.slider(
-            "Method Lean",
-            min_value=0.0,
-            max_value=1.0,
-            value=st.session_state.w_method_lean,
-            format="",
-            label_visibility="collapsed"
-        )
-        
-        lean_labels = ["Qualitative / Theory", "Mixed Methods", "Quantitative / Causal"]
-        if method_lean < 0.35:
-            st.caption(f"← **{lean_labels[0]}**")
-        elif method_lean > 0.65:
-            st.caption(f"**{lean_labels[2]}** →")
-        else:
-            st.caption(f"**{lean_labels[1]}**")
-        
-        st.session_state.w_method_lean = method_lean
-        
-        st.divider()
-        
-        st.markdown("##### 👥 Seed Authors (Optional)")
-        suggestions = get_suggested_authors(st.session_state.w_primary_field)
-        if suggestions:
-            st.caption(f"Suggestions: {', '.join(suggestions[:3])}")
-        
-        seed_authors_input = st.text_input(
-            "Seed Authors",
-            value=", ".join(st.session_state.w_seed_authors),
-            placeholder="e.g., Raj Chetty, Esther Duflo",
-            label_visibility="collapsed"
-        )
-        st.session_state.w_seed_authors = [a.strip() for a in seed_authors_input.split(",") if a.strip()]
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        col_a, col_b = st.columns([1, 1])
-        with col_a:
-            if st.button("← Back", use_container_width=True):
-                st.session_state.wizard_step = 1
+                st.session_state.step = 2
                 st.rerun()
-        with col_b:
+
+
+def step2():
+    opts = get_options()
+    
+    st.markdown('<div class="hero-box"><div class="hero-title">Research Interests</div><div class="hero-sub">Select topics and methods that matter to you</div></div>', unsafe_allow_html=True)
+    
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        st.markdown("#### 🎯 Topics (up to 5)")
+        st.session_state.interests = st.multiselect("Topics", opts["secondary_interests"], default=st.session_state.interests, max_selections=5, label_visibility="collapsed")
+        
+        st.markdown("#### ⚙️ Methods (up to 4)")
+        st.session_state.methods = st.multiselect("Methods", opts["methodologies"], default=st.session_state.methods, max_selections=4, label_visibility="collapsed")
+        
+        st.markdown("#### 📊 Orientation")
+        st.session_state.method_lean = st.slider("Lean", 0.0, 1.0, st.session_state.method_lean, format="", label_visibility="collapsed")
+        lc, mc, rc = st.columns(3)
+        with lc:
+            st.caption("← Qualitative")
+        with mc:
+            st.caption("Mixed")
+        with rc:
+            st.caption("Quantitative →")
+        
+        st.markdown("#### 👥 Seed Authors (optional)")
+        sugg = get_suggested_authors(st.session_state.primary_field)
+        if sugg:
+            st.caption(f"Try: {', '.join(sugg[:3])}")
+        inp = st.text_input("Authors", ", ".join(st.session_state.seed_authors), placeholder="Raj Chetty, Esther Duflo", label_visibility="collapsed")
+        st.session_state.seed_authors = [a.strip() for a in inp.split(",") if a.strip()]
+        
+        st.markdown("")
+        bc1, bc2 = st.columns(2)
+        with bc1:
+            if st.button("← Back", use_container_width=True):
+                st.session_state.step = 1
+                st.rerun()
+        with bc2:
             if st.button("Continue →", type="primary", use_container_width=True):
-                if not interests:
-                    st.error("Please select at least one interest")
-                elif not methods:
-                    st.error("Please select at least one method")
+                if not st.session_state.interests:
+                    st.error("Select at least one topic")
+                elif not st.session_state.methods:
+                    st.error("Select at least one method")
                 else:
-                    st.session_state.wizard_step = 3
+                    st.session_state.step = 3
                     st.rerun()
 
 
-def render_step_3_sources():
-    """Step 3: Journal and source selection."""
-    journal_opts = get_journal_options()
+def step3():
+    jopts = get_journal_options()
     
-    st.markdown("""
-    <div class="hero">
-        <h1>Choose your sources</h1>
-        <p>Select which journals to search and how far back to look.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="hero-box"><div class="hero-title">Select Sources</div><div class="hero-sub">Choose journals and time range</div></div>', unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        st.markdown("##### 📖 Field")
-        field_choice = st.radio(
-            "Field",
-            ["Economics", "Political Science", "Both"],
-            horizontal=True,
-            label_visibility="collapsed"
-        )
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        st.markdown("#### 📖 Field")
+        field = st.radio("F", ["Economics", "Political Science", "Both"], horizontal=True, label_visibility="collapsed")
         
-        st.divider()
-        
-        st.markdown("##### 📚 Journals")
-        
-        if field_choice == "Economics":
-            available = get_economics_journals()
-            top_journals = journal_opts["economics"]["top5"]
-        elif field_choice == "Political Science":
-            available = get_polisci_journals()
-            top_journals = journal_opts["polisci"]["top3"]
+        if field == "Economics":
+            avail = get_economics_journals()
+            top = jopts["economics"]["top5"]
+        elif field == "Political Science":
+            avail = get_polisci_journals()
+            top = jopts["polisci"]["top3"]
         else:
-            available = get_all_journals()
-            top_journals = journal_opts["economics"]["top5"][:3] + journal_opts["polisci"]["top3"][:2]
+            avail = get_all_journals()
+            top = jopts["economics"]["top5"][:3] + jopts["polisci"]["top3"][:2]
         
-        qcol1, qcol2 = st.columns(2)
-        with qcol1:
-            if st.button("Select Top Journals", use_container_width=True):
-                st.session_state.w_journals = top_journals
+        st.markdown("#### 📚 Journals")
+        b1, b2 = st.columns(2)
+        with b1:
+            if st.button("Top Journals", use_container_width=True):
+                st.session_state.journals = top
                 st.rerun()
-        with qcol2:
-            if st.button("Select All", use_container_width=True):
-                st.session_state.w_journals = available
+        with b2:
+            if st.button("All Journals", use_container_width=True):
+                st.session_state.journals = avail
                 st.rerun()
         
-        current_selection = [j for j in st.session_state.w_journals if j in available]
-        if not current_selection:
-            current_selection = top_journals[:3]
+        curr = [j for j in st.session_state.journals if j in avail] or top[:3]
+        st.session_state.journals = st.multiselect("J", avail, default=curr, label_visibility="collapsed")
         
-        journals = st.multiselect(
-            "Journals",
-            options=available,
-            default=current_selection,
-            label_visibility="collapsed"
-        )
-        st.session_state.w_journals = journals
+        st.markdown("#### ⏱️ Days Back")
+        st.session_state.days_back = st.slider("D", 7, 90, st.session_state.days_back, 7, format="%d days")
         
-        st.divider()
+        st.markdown("#### 📊 Max Papers")
+        st.session_state.max_papers = st.slider("M", 10, 50, st.session_state.max_papers, 5)
         
-        st.markdown("##### ⏱️ Time Range")
-        days_back = st.slider(
-            "Days Back",
-            min_value=7,
-            max_value=90,
-            value=st.session_state.w_days_back,
-            step=7,
-            format="%d days",
-            label_visibility="collapsed"
-        )
-        st.session_state.w_days_back = days_back
-        
-        st.markdown("##### 📊 Maximum Papers")
-        max_papers = st.slider(
-            "Max Papers",
-            min_value=10,
-            max_value=50,
-            value=st.session_state.w_max_papers,
-            step=5,
-            label_visibility="collapsed"
-        )
-        st.session_state.w_max_papers = max_papers
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        col_a, col_b = st.columns([1, 1])
-        with col_a:
+        st.markdown("")
+        bc1, bc2 = st.columns(2)
+        with bc1:
             if st.button("← Back", use_container_width=True):
-                st.session_state.wizard_step = 2
+                st.session_state.step = 2
                 st.rerun()
-        with col_b:
-            if st.button("🔍 Discover Papers", type="primary", use_container_width=True):
-                if not journals:
-                    st.error("Please select at least one journal")
+        with bc2:
+            if st.button("🔍 Find Papers", type="primary", use_container_width=True):
+                if not st.session_state.journals:
+                    st.error("Select at least one journal")
                 else:
-                    st.session_state.wizard_step = 4
+                    st.session_state.step = 4
                     st.rerun()
 
 
-def render_step_4_results():
-    """Step 4: Discovery and results."""
-    if not st.session_state.processed_papers:
-        run_discovery()
-    render_results()
+def step4():
+    if not st.session_state.papers:
+        discover()
+    results()
 
 
-def run_discovery():
-    """Execute the paper discovery pipeline."""
+def discover():
     profile = create_user_profile(
-        academic_level=st.session_state.w_academic_level,
-        primary_field=st.session_state.w_primary_field,
-        secondary_interests=st.session_state.w_interests,
-        preferred_methodology=st.session_state.w_methods,
-        regional_focus=st.session_state.w_region,
-        seed_authors=st.session_state.w_seed_authors,
-        methodological_lean=st.session_state.w_method_lean
+        academic_level=st.session_state.academic_level,
+        primary_field=st.session_state.primary_field,
+        secondary_interests=st.session_state.interests,
+        preferred_methodology=st.session_state.methods,
+        regional_focus=st.session_state.region,
+        seed_authors=st.session_state.seed_authors,
+        methodological_lean=st.session_state.method_lean
     )
-    st.session_state.user_profile = profile
+    st.session_state.profile = profile
     
-    progress_container = st.empty()
-    status_container = st.empty()
-    
-    with progress_container.container():
-        st.markdown("""
-        <div style="text-align: center; padding: 60px 20px;">
-            <div style="font-size: 48px; margin-bottom: 20px;">🔬</div>
-            <h2>Discovering papers...</h2>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    try:
-        with status_container:
-            st.info("📚 Fetching papers from OpenAlex...")
+    with st.status("🔬 Finding papers...", expanded=True) as status:
+        st.write("📡 Fetching from OpenAlex...")
         
-        papers = cached_fetch_papers(
-            tuple(st.session_state.w_journals),
-            st.session_state.w_days_back,
-            st.session_state.w_max_papers
-        )
-        
-        if not papers:
-            progress_container.empty()
-            status_container.error("No papers found. Try expanding your date range or journal selection.")
-            if st.button("← Adjust Settings"):
-                st.session_state.wizard_step = 3
-                st.rerun()
-            return
-        
-        with status_container:
-            st.success(f"✓ Found {len(papers)} papers")
-        
-        time.sleep(0.5)
-        
-        with status_container:
-            st.info("🤖 AI analyzing relevance...")
-        
-        def progress_cb(msg):
-            with status_container:
-                st.info(msg)
-        
-        processed, messages, synthesis = process_papers_with_gemini(
-            api_key=st.session_state.api_key,
-            user_profile=profile,
-            papers=papers,
-            use_semantic_prerank=True,
-            progress_callback=progress_cb
-        )
-        
-        st.session_state.processed_papers = processed
-        st.session_state.status_messages = messages
-        st.session_state.synthesis = synthesis
-        
-        progress_container.empty()
-        status_container.empty()
-        
-        st.rerun()
-        
-    except OpenAlexError as e:
-        progress_container.empty()
-        status_container.error(f"API Error: {str(e)}")
-    except Exception as e:
-        progress_container.empty()
-        status_container.error(f"Error: {str(e)}")
+        try:
+            papers = fetch_papers_cached(tuple(st.session_state.journals), st.session_state.days_back, st.session_state.max_papers)
+            
+            if not papers:
+                status.update(label="No papers found", state="error")
+                st.error("No papers found. Try expanding date range or journals.")
+                if st.button("← Adjust"):
+                    st.session_state.step = 3
+                    st.rerun()
+                return
+            
+            st.write(f"✓ Found {len(papers)} papers")
+            st.write("🔬 Computing matches...")
+            
+            processed, msgs = process_papers(profile, papers, lambda m: st.write(m))
+            
+            st.session_state.papers = processed
+            st.session_state.messages = msgs
+            
+            status.update(label="✓ Done!", state="complete")
+            time.sleep(0.3)
+            st.rerun()
+            
+        except OpenAlexError as e:
+            status.update(label="Error", state="error")
+            st.error(f"API Error: {e}")
+        except Exception as e:
+            status.update(label="Error", state="error")
+            st.error(f"Error: {e}")
 
 
-def render_results():
-    """Render the discovery results."""
-    papers = st.session_state.processed_papers
-    synthesis = st.session_state.synthesis
-    messages = st.session_state.status_messages
+def results():
+    papers = st.session_state.papers
+    msgs = st.session_state.messages
     
     if not papers:
-        st.warning("No papers to display.")
-        if st.button("← Back to Settings"):
-            st.session_state.processed_papers = []
-            st.session_state.wizard_step = 3
+        st.warning("No papers.")
+        if st.button("← Back"):
+            st.session_state.papers = []
+            st.session_state.step = 3
             st.rerun()
         return
     
-    st.markdown("""
-    <div class="hero" style="padding-bottom: 20px;">
-        <h1>Your personalized reading list</h1>
+    st.markdown('<div class="hero-box"><div class="hero-title">Your Reading List</div><div class="hero-sub">Papers ranked by relevance to your profile</div></div>', unsafe_allow_html=True)
+    
+    high = sum(1 for p in papers if p.get("relevance_score", 0) >= 7)
+    med = sum(1 for p in papers if 4 <= p.get("relevance_score", 0) < 7)
+    
+    st.markdown(f'''
+    <div class="metric-grid">
+        <div class="metric-card"><div class="metric-num">{len(papers)}</div><div class="metric-txt">Papers</div></div>
+        <div class="metric-card"><div class="metric-num">{high}</div><div class="metric-txt">High Match</div></div>
+        <div class="metric-card"><div class="metric-num">{med}</div><div class="metric-txt">Medium</div></div>
     </div>
-    """, unsafe_allow_html=True)
+    ''', unsafe_allow_html=True)
     
-    analyzed = sum(1 for p in papers if p.get("has_ai_analysis"))
-    high_rel = sum(1 for p in papers if p.get("relevance_score", 0) >= 8 and p.get("has_ai_analysis"))
+    for m in msgs:
+        st.markdown(f'<div class="success-msg">{m}</div>', unsafe_allow_html=True)
     
-    st.markdown(f"""
-    <div class="metric-row">
-        <div class="metric-box">
-            <div class="metric-value">{len(papers)}</div>
-            <div class="metric-label">Papers Found</div>
-        </div>
-        <div class="metric-box">
-            <div class="metric-value">{analyzed}</div>
-            <div class="metric-label">AI Analyzed</div>
-        </div>
-        <div class="metric-box">
-            <div class="metric-value">{high_rel}</div>
-            <div class="metric-label">High Relevance</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    if synthesis:
-        st.markdown(f"""
-        <div class="synthesis-box">
-            <h3>📝 Editor's Synthesis</h3>
-            <p>{synthesis}</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    if messages:
-        first_msg = messages[0]
-        if "✓" in first_msg:
-            st.markdown(f'<div class="status-success">{first_msg}</div>', unsafe_allow_html=True)
-        elif "⚠️" in first_msg:
-            st.markdown(f'<div class="status-warning">{first_msg}</div>', unsafe_allow_html=True)
-        
-        if len(messages) > 1:
-            with st.expander("View all status messages"):
-                for msg in messages[1:]:
-                    st.caption(msg)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
-    
-    with col1:
-        min_score = st.slider("Min relevance", 1, 10, 1, key="filter_score")
-    with col2:
-        sort_by = st.selectbox("Sort by", ["Relevance", "Date", "Citations"], key="filter_sort")
-    with col3:
-        oa_only = st.checkbox("Open Access only", key="filter_oa")
-    with col4:
-        if st.button("🔄 New Search"):
-            st.session_state.processed_papers = []
-            st.session_state.wizard_step = 1
+    # Filters
+    f1, f2, f3, f4 = st.columns([2, 2, 2, 1])
+    with f1:
+        min_score = st.slider("Min score", 1.0, 10.0, 1.0, 0.5)
+    with f2:
+        sort_by = st.selectbox("Sort", ["Relevance", "Date", "Citations"])
+    with f3:
+        oa_only = st.checkbox("Open Access only")
+    with f4:
+        if st.button("🔄 New"):
+            st.session_state.papers = []
+            st.session_state.step = 1
             st.rerun()
     
     filtered = [p for p in papers if p.get("relevance_score", 0) >= min_score]
@@ -931,25 +542,17 @@ def render_results():
     elif sort_by == "Citations":
         filtered.sort(key=lambda x: x.get("cited_by_count", 0), reverse=True)
     else:
-        filtered.sort(
-            key=lambda x: (x.get("has_ai_analysis", False), x.get("relevance_score", 0)),
-            reverse=True
-        )
+        filtered.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.divider()
     
     if not filtered:
-        st.info("No papers match your filters.")
+        st.info("No papers match filters.")
     else:
-        for idx, paper in enumerate(filtered):
-            render_match_card(paper, idx)
+        for i, p in enumerate(filtered, 1):
+            show_paper(p, i)
     
-    st.markdown("""
-    <div style="text-align: center; color: #86868B; font-size: 13px; padding: 20px;">
-        Data from <a href="https://openalex.org" target="_blank" style="color: #0071E3;">OpenAlex</a> · 
-        AI by <a href="https://ai.google.dev" target="_blank" style="color: #0071E3;">Gemini</a>
-    </div>
-    """, unsafe_allow_html=True)
+    st.caption("Data from [OpenAlex](https://openalex.org)")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -957,17 +560,16 @@ def render_results():
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def main():
-    """Main application entry point."""
-    render_wizard_progress(st.session_state.wizard_step)
+    show_steps(st.session_state.step)
     
-    if st.session_state.wizard_step == 1:
-        render_step_1_profile()
-    elif st.session_state.wizard_step == 2:
-        render_step_2_interests()
-    elif st.session_state.wizard_step == 3:
-        render_step_3_sources()
-    elif st.session_state.wizard_step == 4:
-        render_step_4_results()
+    if st.session_state.step == 1:
+        step1()
+    elif st.session_state.step == 2:
+        step2()
+    elif st.session_state.step == 3:
+        step3()
+    elif st.session_state.step == 4:
+        step4()
 
 
 if __name__ == "__main__":
