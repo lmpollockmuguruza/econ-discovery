@@ -59,9 +59,20 @@ st.markdown("""
         font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
     }
     
-    /* Hide default Streamlit elements */
-    #MainMenu, footer, header {visibility: hidden;}
+    /* Hide default Streamlit elements - but keep sidebar toggle visible */
+    #MainMenu, footer {visibility: hidden;}
     .stDeployButton {display: none;}
+    
+    /* Ensure sidebar toggle is always visible */
+    [data-testid="collapsedControl"] {
+        visibility: visible !important;
+        display: flex !important;
+        color: #0a0a0a !important;
+        background: #ffffff !important;
+        border: 1px solid #e5e5e5 !important;
+        border-radius: 8px !important;
+        margin: 1rem !important;
+    }
     
     /* All text should use our font */
     html, body, [class*="css"], .stMarkdown, p, span, div, h1, h2, h3, h4, label {
@@ -550,8 +561,23 @@ if not st.session_state.processed_papers:
                 <div style="font-size: 0.75rem; color: #999; text-transform: uppercase; letter-spacing: 0.05em;">powered</div>
             </div>
         </div>
-        <p style="font-size: 0.9rem; color: #999;">
-            Configure your profile in the sidebar and click <strong>Discover Papers</strong>
+        <div style="
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #0a0a0a;
+            color: #fff;
+            padding: 0.75rem 1.5rem;
+            border-radius: 100px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+        ">
+            <span style="font-size: 1.2rem;">←</span>
+            <span>Click the arrow to open settings</span>
+        </div>
+        <p style="font-size: 0.85rem; color: #999;">
+            Configure your profile, then click <strong>Discover Papers</strong>
         </p>
     </div>
     """, unsafe_allow_html=True)
