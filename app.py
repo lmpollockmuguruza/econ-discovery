@@ -2,7 +2,7 @@
 Literature Discovery - Streamlit Application
 A clean interface for discovering relevant academic papers.
 
-UPDATED: Uses new google-genai SDK, model selection, better error handling
+STABLE VERSION: Works with google-generativeai (legacy SDK)
 """
 
 import streamlit as st
@@ -18,9 +18,7 @@ from processor import (
     process_papers_with_gemini,
     create_user_profile,
     get_profile_options,
-    get_sdk_info,
-    AVAILABLE_MODELS,
-    DEFAULT_MODEL
+    get_sdk_info
 )
 
 # ============================================================================
@@ -108,11 +106,9 @@ with st.sidebar:
     # SDK Status
     sdk_info = get_sdk_info()
     if sdk_info["available"]:
-        sdk_label = "new SDK ✓" if sdk_info["sdk"] == "new" else "legacy SDK"
-        st.caption(f"🤖 Gemini: {sdk_label}")
+        st.caption("🤖 Gemini SDK: Ready")
     else:
-        st.error("⚠️ Gemini SDK not installed")
-        st.code("pip install google-genai", language="bash")
+        st.error("⚠️ Gemini SDK missing")
     
     st.divider()
     
@@ -131,16 +127,7 @@ with st.sidebar:
         if len(api_key) >= 30:
             st.success("Key entered", icon="✅")
         else:
-            st.warning("Key looks too short", icon="⚠️")
-    
-    # Model selection
-    model_options = list(AVAILABLE_MODELS.keys())
-    selected_model = st.selectbox(
-        "Model",
-        options=model_options,
-        index=0,
-        help=AVAILABLE_MODELS.get(model_options[0], "")
-    )
+            st.warning("Key seems short", icon="⚠️")
     
     st.divider()
     
@@ -199,21 +186,16 @@ with st.sidebar:
     selected_journals = st.multiselect(
         "Journals",
         options=available,
-        default=available[:3],  # Fewer defaults for faster demo
+        default=available[:3],
         label_visibility="collapsed"
     )
     
     days_back = st.slider("Days back", 7, 90, 30, step=7)
-    max_papers = st.slider("Max papers", 5, 50, 15, step=5, help="Fewer = faster")
+    max_papers = st.slider("Max papers", 5, 50, 15, step=5)
     
     st.divider()
     
-    # Debug toggle
-    st.session_state.debug_mode = st.checkbox(
-        "🔧 Debug mode", 
-        value=st.session_state.debug_mode,
-        help="Show detailed error info"
-    )
+    st.session_state.debug_mode = st.checkbox("🔧 Debug mode", value=st.session_state.debug_mode)
     
     fetch_clicked = st.button(
         "🔍 Discover Papers", 
@@ -229,21 +211,10 @@ with st.sidebar:
 st.title("📚 Literature Discovery")
 st.caption("Papers ranked by AI based on YOUR research interests")
 
-# Show SDK warning if needed
-if not sdk_info["available"]:
-    st.error("""
-    **Gemini SDK not installed.** Run this command:
-    ```
-    pip install google-genai
-    ```
-    Then restart the app.
-    """)
-
 st.divider()
 
 # Process request
 if fetch_clicked:
-    # Validation
     errors = []
     if not api_key:
         errors.append("Enter your Gemini API key")
@@ -251,14 +222,11 @@ if fetch_clicked:
         errors.append("Select at least one journal")
     if not secondary_interests:
         errors.append("Select at least one interest")
-    if not sdk_info["available"]:
-        errors.append("Gemini SDK not installed")
     
     if errors:
         for e in errors:
             st.error(f"⚠️ {e}")
     else:
-        # Create profile
         profile = create_user_profile(
             academic_level=academic_level,
             primary_field=primary_field,
@@ -267,14 +235,12 @@ if fetch_clicked:
         )
         st.session_state.user_profile = profile
         
-        # Show what we're searching for
         with st.status("Searching...", expanded=True) as status:
-            st.write(f"**Your profile:** {primary_field} · {academic_level}")
+            st.write(f"**Profile:** {primary_field} · {academic_level}")
             st.write(f"**Interests:** {', '.join(secondary_interests)}")
-            st.write(f"**Model:** {selected_model}")
             
             st.write("---")
-            st.write("🔍 Fetching papers from OpenAlex...")
+            st.write("🔍 Fetching from OpenAlex...")
             
             papers = fetch_recent_papers(
                 days_back=days_back,
@@ -284,37 +250,34 @@ if fetch_clicked:
             
             if not papers:
                 status.update(label="No papers found", state="error")
-                st.error("No papers found. Try a longer time range or different journals.")
+                st.error("No papers found. Try longer time range.")
             else:
                 st.write(f"✓ Found {len(papers)} papers")
                 
-                if st.session_state.debug_mode:
-                    with st.expander("Debug: Sample paper data"):
-                        st.json(papers[0] if papers else {})
+                if st.session_state.debug_mode and papers:
+                    with st.expander("Debug: Sample paper"):
+                        st.json(papers[0])
                 
                 st.write("---")
-                st.write(f"🤖 Analyzing with {selected_model}...")
+                st.write("🤖 AI analyzing...")
                 
-                # Process with Gemini
                 try:
                     processed, ai_errors = process_papers_with_gemini(
                         api_key=api_key,
                         user_profile=profile,
                         papers=papers,
-                        batch_size=3,  # Smaller batches for reliability
-                        model_name=selected_model
+                        batch_size=3
                     )
                     
                     st.session_state.processed_papers = processed
                     st.session_state.ai_errors = ai_errors
                     
-                    # Count successful analyses
                     analyzed = sum(1 for p in processed if p.get("has_ai_analysis"))
                     
                     if analyzed > 0:
-                        status.update(label=f"✓ Analyzed {analyzed}/{len(papers)} papers!", state="complete")
+                        status.update(label=f"✓ Done! {analyzed}/{len(papers)} analyzed", state="complete")
                     else:
-                        status.update(label="⚠️ AI analysis failed - see errors below", state="error")
+                        status.update(label="⚠️ AI failed - check errors", state="error")
                     
                     st.rerun()
                     
@@ -327,26 +290,25 @@ if fetch_clicked:
 
 
 # ============================================================================
-# ERRORS - PROMINENTLY DISPLAYED
+# ERRORS - VISIBLE
 # ============================================================================
 
 if st.session_state.ai_errors:
-    has_critical = any(
-        "ALL" in err or "API Key" in err or "not found" in err.lower() 
-        for err in st.session_state.ai_errors
-    )
+    # Show first message (summary) prominently
+    first_msg = st.session_state.ai_errors[0] if st.session_state.ai_errors else ""
     
-    if has_critical:
-        st.error("🚨 **AI Analysis Issues**")
-        for err in st.session_state.ai_errors:
-            st.error(err)
+    if "✓" in first_msg:
+        st.success(first_msg)
+    elif "⚠️" in first_msg or "failed" in first_msg.lower():
+        st.error(first_msg)
     else:
-        with st.expander("⚠️ Some issues occurred", expanded=True):
-            for err in st.session_state.ai_errors:
-                if err.startswith("ℹ️"):
-                    st.info(err)
-                else:
-                    st.warning(err)
+        st.info(first_msg)
+    
+    # Show remaining errors
+    if len(st.session_state.ai_errors) > 1:
+        with st.expander("Details", expanded=False):
+            for err in st.session_state.ai_errors[1:]:
+                st.warning(err)
 
 
 # ============================================================================
@@ -357,7 +319,6 @@ if st.session_state.processed_papers:
     papers = st.session_state.processed_papers
     profile = st.session_state.user_profile
     
-    # Stats
     analyzed = sum(1 for p in papers if p.get("has_ai_analysis"))
     high_rel = sum(1 for p in papers if p.get("relevance_score", 0) >= 8 and p.get("has_ai_analysis"))
     
@@ -366,18 +327,8 @@ if st.session_state.processed_papers:
     c2.metric("AI Analyzed", f"{analyzed}/{len(papers)}")
     c3.metric("High Relevance", high_rel)
     
-    if analyzed == 0:
-        st.warning("""
-        **No papers were analyzed by AI.** Common causes:
-        - Invalid API key
-        - API quota exceeded (wait a few minutes)
-        - Model not available (try `gemini-2.0-flash`)
-        
-        Papers are shown below without relevance scores.
-        """)
-    
     if profile:
-        st.caption(f"📊 Ranked for: **{profile['primary_field']}** researcher interested in **{', '.join(profile['secondary_interests'][:3])}**")
+        st.caption(f"📊 For: **{profile['primary_field']}** · **{', '.join(profile['secondary_interests'][:2])}**")
     
     st.divider()
     
@@ -390,12 +341,10 @@ if st.session_state.processed_papers:
     with f3:
         oa_only = st.checkbox("Open Access")
     
-    # Apply filters
     filtered = [p for p in papers if p.get("relevance_score", 0) >= min_score]
     if oa_only:
         filtered = [p for p in filtered if p.get("is_open_access")]
     
-    # Sort
     if sort_by == "Date":
         filtered.sort(key=lambda x: x.get("publication_date", ""), reverse=True)
     elif sort_by == "Citations":
@@ -405,14 +354,12 @@ if st.session_state.processed_papers:
     
     st.divider()
     
-    # Debug
     if st.session_state.debug_mode and filtered:
-        with st.expander("🔧 Debug: First result raw data"):
+        with st.expander("🔧 Debug: First result"):
             st.json(filtered[0])
     
-    # Display papers
     if not filtered:
-        st.info("No papers match your filters.")
+        st.info("No papers match filters.")
     else:
         for paper in filtered:
             score = paper.get("relevance_score", 5)
@@ -425,7 +372,6 @@ if st.session_state.processed_papers:
                 with scol:
                     st.markdown(f"**{get_score_display(score, has_ai)}**")
                 
-                # Meta
                 authors = paper.get("authors", [])
                 author_str = ", ".join(authors[:3])
                 if len(authors) > 3:
@@ -436,10 +382,9 @@ if st.session_state.processed_papers:
                     meta += f" · 👤 {author_str}"
                 meta += f" · 📅 {format_date(paper.get('publication_date'))}"
                 if paper.get("is_open_access"):
-                    meta += " · 🔓 Open"
+                    meta += " · 🔓"
                 st.caption(meta)
                 
-                # AI Analysis
                 if has_ai:
                     contribution = paper.get("ai_contribution", "")
                     relevance = paper.get("ai_relevance", "")
@@ -449,47 +394,42 @@ if st.session_state.processed_papers:
                         st.write(contribution)
                     
                     if relevance:
-                        st.markdown("**🎯 Why relevant to you:**")
+                        st.markdown("**🎯 Why relevant:**")
                         st.info(relevance)
                 else:
                     st.caption("_AI analysis not available_")
                 
-                # Footer
                 method = paper.get("ai_methodology", "")
                 link = paper.get("doi") or paper.get("oa_url")
                 
                 fcol1, fcol2 = st.columns([3, 1])
                 with fcol1:
                     if method:
-                        st.caption(f"📊 Method: {method}")
+                        st.caption(f"📊 {method}")
                 with fcol2:
                     if link:
                         st.link_button("Read →", link)
 
 else:
-    # Empty state
-    st.info("👈 Set up your profile in the sidebar and click **Discover Papers**")
+    st.info("👈 Set up your profile and click **Discover Papers**")
     
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("### How it works")
         st.markdown("""
-        1. Get a free [Gemini API key](https://aistudio.google.com/app/apikey)
-        2. Set your research field & interests
-        3. Select journals to search
+        1. Get a [Gemini API key](https://aistudio.google.com/app/apikey)
+        2. Set your research interests
+        3. Select journals
         4. Click **Discover Papers**
-        5. AI scores each paper's relevance to YOU
         """)
     
     with c2:
-        st.markdown("### What makes it personal")
+        st.markdown("### What it does")
         st.markdown("""
-        The AI reads each paper's abstract and evaluates:
-        - Does it match your **primary field**?
-        - Does it cover your **interests**?
-        - Does it use your **preferred methods**?
-        
-        Papers are scored 1-10 based on YOUR profile.
+        AI reads each abstract and scores:
+        - Match to your **field**
+        - Match to your **interests**
+        - Match to your **methods**
         """)
 
 
