@@ -1,7 +1,6 @@
 """
 Literature Discovery - Streamlit Application
 A clean interface for discovering relevant academic papers.
-Built with native Streamlit components for reliability.
 """
 
 import streamlit as st
@@ -31,33 +30,26 @@ st.set_page_config(
 )
 
 # ============================================================================
-# MINIMAL CSS - ONLY FOR COLORS/FONTS
+# MINIMAL CSS
 # ============================================================================
 
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
-    .stApp {
-        background-color: #FAFAFA;
-    }
-    
+    .stApp { background-color: #FAFAFA; }
     html, body, [class*="css"] {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
-    
-    footer {visibility: hidden;}
+    footer { visibility: hidden; }
     
     .stButton > button[kind="primary"] {
         background-color: #0a0a0a;
         color: white;
-        border: none;
         border-radius: 8px;
     }
-    
     .stButton > button[kind="primary"]:hover {
         background-color: #333;
-        border: none;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -67,32 +59,36 @@ st.markdown("""
 # SESSION STATE
 # ============================================================================
 
-if "papers" not in st.session_state:
-    st.session_state.papers = []
 if "processed_papers" not in st.session_state:
     st.session_state.processed_papers = []
+if "ai_errors" not in st.session_state:
+    st.session_state.ai_errors = []
+if "user_profile" not in st.session_state:
+    st.session_state.user_profile = None
 
 
 # ============================================================================
-# HELPER FUNCTIONS
+# HELPERS
 # ============================================================================
 
 def format_date(date_str: str) -> str:
     if not date_str:
-        return "Unknown date"
+        return "Unknown"
     try:
-        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-        return date_obj.strftime("%b %d, %Y")
+        return datetime.strptime(date_str, "%Y-%m-%d").strftime("%b %d, %Y")
     except:
         return date_str
 
 
-def get_score_emoji(score: int) -> str:
+def get_score_display(score: int, has_ai: bool) -> str:
+    """Return score with color indicator."""
+    if not has_ai:
+        return "⚪ ?/10"  # No AI analysis
     if score >= 8:
-        return "🟢"
+        return f"🟢 {score}/10"
     elif score >= 5:
-        return "🟡"
-    return "⚪"
+        return f"🟡 {score}/10"
+    return f"🔴 {score}/10"
 
 
 # ============================================================================
@@ -104,18 +100,21 @@ with st.sidebar:
     
     # API KEY
     st.subheader("🔑 API Key")
-    st.markdown("Get a free key at [Google AI Studio](https://makersuite.google.com/app/apikey)")
+    st.markdown("[Get free key →](https://makersuite.google.com/app/apikey)")
     
     api_key = st.text_input(
         "API Key",
         type="password",
-        placeholder="Paste your API key",
+        placeholder="Paste Gemini API key",
         label_visibility="collapsed"
     )
     
+    if api_key:
+        st.success("✓ Key entered", icon="✓")
+    
     st.divider()
     
-    # RESEARCH PROFILE
+    # PROFILE
     st.subheader("👤 Your Profile")
     
     options = get_profile_options()
@@ -133,17 +132,19 @@ with st.sidebar:
     )
     
     secondary_interests = st.multiselect(
-        "Interests (up to 5)",
+        "Interests",
         options=options["secondary_interests"],
         default=["Causal Inference"],
-        max_selections=5
+        max_selections=5,
+        help="Up to 5"
     )
     
     preferred_methods = st.multiselect(
-        "Methods (up to 4)",
+        "Methods",
         options=options["methodologies"],
         default=["Difference-in-Differences"],
-        max_selections=4
+        max_selections=4,
+        help="Up to 4"
     )
     
     st.divider()
@@ -159,16 +160,16 @@ with st.sidebar:
     )
     
     if field_choice == "Economics":
-        available_journals = get_economics_journals()
+        available = get_economics_journals()
     elif field_choice == "Political Science":
-        available_journals = get_polisci_journals()
+        available = get_polisci_journals()
     else:
-        available_journals = get_all_journals()
+        available = get_all_journals()
     
     selected_journals = st.multiselect(
         "Journals",
-        options=available_journals,
-        default=available_journals[:5],
+        options=available,
+        default=available[:5],
         label_visibility="collapsed"
     )
     
@@ -176,7 +177,6 @@ with st.sidebar:
     
     st.divider()
     
-    # ACTION
     fetch_clicked = st.button(
         "🔍 Discover Papers", 
         use_container_width=True, 
@@ -185,69 +185,112 @@ with st.sidebar:
 
 
 # ============================================================================
-# MAIN CONTENT
+# MAIN
 # ============================================================================
 
 st.title("📚 Literature Discovery")
-st.caption("Find papers that matter to your research, ranked by AI.")
+st.caption("Papers ranked by AI based on YOUR research interests")
 
 st.divider()
 
-# Handle fetch
+# Process request
 if fetch_clicked:
+    # Validation
+    errors = []
     if not api_key:
-        st.error("Please enter your Gemini API key in the sidebar.")
-    elif not selected_journals:
-        st.error("Please select at least one journal.")
-    elif not secondary_interests:
-        st.error("Please select at least one interest.")
+        errors.append("Enter your Gemini API key")
+    if not selected_journals:
+        errors.append("Select at least one journal")
+    if not secondary_interests:
+        errors.append("Select at least one interest")
+    
+    if errors:
+        for e in errors:
+            st.error(f"⚠️ {e}")
     else:
+        # Create profile
         profile = create_user_profile(
             academic_level=academic_level,
             primary_field=primary_field,
             secondary_interests=secondary_interests,
             preferred_methodology=preferred_methods
         )
+        st.session_state.user_profile = profile
         
-        with st.spinner("Fetching papers from OpenAlex..."):
+        # Show what we're searching for
+        with st.status("Searching...", expanded=True) as status:
+            st.write(f"**Your profile:** {primary_field} · {academic_level}")
+            st.write(f"**Interests:** {', '.join(secondary_interests)}")
+            st.write(f"**Methods:** {', '.join(preferred_methods)}")
+            
+            st.write("---")
+            st.write("🔍 Fetching papers from OpenAlex...")
+            
             papers = fetch_recent_papers(
                 days_back=days_back,
                 selected_journals=selected_journals,
-                max_results=50
+                max_results=30  # Reduced for faster processing
             )
-            st.session_state.papers = papers
-        
-        if papers:
-            st.success(f"Found {len(papers)} papers!")
             
-            with st.spinner("AI is analyzing relevance..."):
+            if not papers:
+                status.update(label="No papers found", state="error")
+                st.error("No papers found. Try a longer time range or different journals.")
+            else:
+                st.write(f"✓ Found {len(papers)} papers")
+                st.write("---")
+                st.write("🤖 AI is analyzing relevance to your interests...")
+                
+                # Process with Gemini
                 try:
-                    processed = process_papers_with_gemini(
+                    processed, ai_errors = process_papers_with_gemini(
                         api_key=api_key,
                         user_profile=profile,
                         papers=papers,
-                        batch_size=8
+                        batch_size=5
                     )
+                    
                     st.session_state.processed_papers = processed
+                    st.session_state.ai_errors = ai_errors
+                    
+                    # Count successful analyses
+                    analyzed = sum(1 for p in processed if p.get("has_ai_analysis"))
+                    
+                    if analyzed > 0:
+                        status.update(label=f"✓ Analyzed {analyzed} papers!", state="complete")
+                    else:
+                        status.update(label="⚠️ AI analysis failed", state="error")
+                    
                     st.rerun()
+                    
                 except Exception as e:
+                    status.update(label="Error", state="error")
                     st.error(f"Error: {str(e)}")
-        else:
-            st.warning("No papers found. Try a longer time range.")
+
+
+# Show errors if any
+if st.session_state.ai_errors:
+    with st.expander("⚠️ Some issues occurred", expanded=False):
+        for err in st.session_state.ai_errors:
+            st.warning(err)
 
 
 # Display results
 if st.session_state.processed_papers:
     papers = st.session_state.processed_papers
+    profile = st.session_state.user_profile
     
     # Stats
-    col1, col2, col3 = st.columns(3)
-    high_rel = len([p for p in papers if p.get("relevance_score", 0) >= 8])
-    avg = sum(p.get("relevance_score", 0) for p in papers) / len(papers) if papers else 0
+    analyzed = sum(1 for p in papers if p.get("has_ai_analysis"))
+    high_rel = sum(1 for p in papers if p.get("relevance_score", 0) >= 8 and p.get("has_ai_analysis"))
     
-    col1.metric("Papers", len(papers))
-    col2.metric("High Relevance", high_rel)
-    col3.metric("Avg Score", f"{avg:.1f}")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Papers", len(papers))
+    c2.metric("AI Analyzed", f"{analyzed}/{len(papers)}")
+    c3.metric("High Relevance", high_rel)
+    
+    # Show current profile
+    if profile:
+        st.caption(f"📊 Ranked for: **{profile['primary_field']}** researcher interested in **{', '.join(profile['secondary_interests'][:3])}**")
     
     st.divider()
     
@@ -260,7 +303,7 @@ if st.session_state.processed_papers:
     with f3:
         oa_only = st.checkbox("Open Access")
     
-    # Apply filters
+    # Filter
     filtered = [p for p in papers if p.get("relevance_score", 0) >= min_score]
     if oa_only:
         filtered = [p for p in filtered if p.get("is_open_access")]
@@ -271,7 +314,7 @@ if st.session_state.processed_papers:
     elif sort_by == "Citations":
         filtered.sort(key=lambda x: x.get("cited_by_count", 0), reverse=True)
     else:
-        filtered.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
+        filtered.sort(key=lambda x: (x.get("has_ai_analysis", False), x.get("relevance_score", 0)), reverse=True)
     
     st.divider()
     
@@ -281,15 +324,15 @@ if st.session_state.processed_papers:
     else:
         for paper in filtered:
             score = paper.get("relevance_score", 5)
-            emoji = get_score_emoji(score)
+            has_ai = paper.get("has_ai_analysis", False)
             
             with st.container(border=True):
-                # Title and score
+                # Header
                 tcol, scol = st.columns([5, 1])
                 with tcol:
                     st.markdown(f"**{paper.get('title', 'Untitled')}**")
                 with scol:
-                    st.markdown(f"**{emoji} {score}/10**")
+                    st.markdown(f"**{get_score_display(score, has_ai)}**")
                 
                 # Meta
                 authors = paper.get("authors", [])
@@ -302,20 +345,23 @@ if st.session_state.processed_papers:
                     meta += f" · 👤 {author_str}"
                 meta += f" · 📅 {format_date(paper.get('publication_date'))}"
                 if paper.get("is_open_access"):
-                    meta += " · 🔓 Open Access"
-                
+                    meta += " · 🔓 Open"
                 st.caption(meta)
                 
                 # AI Analysis
-                contribution = paper.get("ai_contribution", "")
-                relevance = paper.get("ai_relevance", "")
-                
-                if contribution or relevance:
-                    st.markdown("**Why read this:**")
+                if has_ai:
+                    contribution = paper.get("ai_contribution", "")
+                    relevance = paper.get("ai_relevance", "")
+                    
                     if contribution:
+                        st.markdown("**📝 Summary:**")
                         st.write(contribution)
+                    
                     if relevance:
-                        st.caption(f"_{relevance}_")
+                        st.markdown("**🎯 Why relevant to you:**")
+                        st.info(relevance)
+                else:
+                    st.caption("_AI analysis not available for this paper_")
                 
                 # Footer
                 method = paper.get("ai_methodology", "")
@@ -324,7 +370,7 @@ if st.session_state.processed_papers:
                 fcol1, fcol2 = st.columns([3, 1])
                 with fcol1:
                     if method:
-                        st.caption(f"📊 {method}")
+                        st.caption(f"📊 Method: {method}")
                 with fcol2:
                     if link:
                         st.link_button("Read →", link)
@@ -337,17 +383,24 @@ else:
     with c1:
         st.markdown("### How it works")
         st.markdown("""
-        1. Enter your Gemini API key
-        2. Set your research interests  
-        3. Choose journals to search
-        4. Click Discover Papers
-        5. AI ranks by relevance to you
+        1. Get a free [Gemini API key](https://makersuite.google.com/app/apikey)
+        2. Set your research field & interests
+        3. Select journals to search
+        4. Click **Discover Papers**
+        5. AI scores each paper's relevance to YOU
         """)
     
     with c2:
-        st.markdown("### Available sources")
-        st.markdown(f"**{len(get_economics_journals())}** Economics journals")
-        st.markdown(f"**{len(get_polisci_journals())}** Political Science journals")
+        st.markdown("### What makes it personal")
+        st.markdown("""
+        The AI reads each paper's abstract and evaluates:
+        - Does it match your **primary field**?
+        - Does it cover your **interests**?
+        - Does it use your **preferred methods**?
+        
+        Papers are scored 1-10 based on YOUR profile.
+        """)
+
 
 st.divider()
 st.caption("Data: [OpenAlex](https://openalex.org) · AI: [Gemini](https://ai.google.dev)")
