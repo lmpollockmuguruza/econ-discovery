@@ -110,7 +110,7 @@ with st.sidebar:
     )
     
     if api_key:
-        st.success("✓ Key entered", icon="✓")
+        st.success("Key entered", icon="✅")
     
     st.divider()
     
