@@ -130,9 +130,6 @@ class NoResultsError(OpenAlexError):
 def reconstruct_abstract(abstract_inverted_index: Optional[dict]) -> str:
     """
     Reconstruct plaintext abstract from OpenAlex's inverted index format.
-    
-    OpenAlex stores abstracts as {word: [positions]} for compression.
-    This function rebuilds the readable text.
     """
     if not abstract_inverted_index:
         return ""
@@ -157,8 +154,6 @@ def _make_request_with_retry(
 ) -> dict:
     """
     Make API request with exponential backoff retry logic.
-    
-    Handles rate limiting, timeouts, and transient errors gracefully.
     """
     last_error = None
     
@@ -187,7 +182,6 @@ def _make_request_with_retry(
         except requests.exceptions.HTTPError as e:
             last_error = f"HTTP {e.response.status_code}"
             if e.response.status_code >= 500:
-                # Server error - retry
                 time.sleep(OpenAlexConfig.RETRY_DELAY * (2 ** attempt))
                 continue
             raise OpenAlexError(last_error)
@@ -196,7 +190,6 @@ def _make_request_with_retry(
             last_error = str(e)
             logger.warning(f"Request error: {e}")
         
-        # Wait before retry
         if attempt < max_retries - 1:
             time.sleep(OpenAlexConfig.RETRY_DELAY * (2 ** attempt))
     
@@ -206,9 +199,6 @@ def _make_request_with_retry(
 def process_paper(paper: dict) -> Optional[dict]:
     """
     Process a single paper from OpenAlex response into clean format.
-    
-    Filters out papers without adequate abstracts and extracts
-    all relevant metadata.
     """
     title = paper.get("title")
     if not title:
@@ -222,7 +212,7 @@ def process_paper(paper: dict) -> Optional[dict]:
     if not abstract or len(abstract) < 100:
         return None
     
-    # Extract authors (limit to 10 for display)
+    # Extract authors
     authors = []
     for authorship in paper.get("authorships", [])[:10]:
         author = authorship.get("author", {})
@@ -243,7 +233,7 @@ def process_paper(paper: dict) -> Optional[dict]:
     source = primary_location.get("source", {}) or {}
     journal_name = source.get("display_name", "Unknown Journal")
     
-    # Extract concepts (topics) with confidence scores
+    # Extract concepts with confidence scores
     concepts = []
     for concept in paper.get("concepts", [])[:8]:
         score = concept.get("score", 0)
@@ -296,19 +286,6 @@ def fetch_recent_papers(
 ) -> List[dict]:
     """
     Fetch recent papers from OpenAlex API for specified journals.
-    
-    Args:
-        days_back: Number of days to look back
-        selected_journals: List of journal names to query
-        per_page: Results per API page (max 200)
-        max_results: Maximum total results to return
-        progress_callback: Optional callback(current, total, message)
-    
-    Returns:
-        List of processed paper dictionaries
-    
-    Raises:
-        OpenAlexError: On API failures after retries
     """
     # Calculate date range
     end_date = datetime.now()
@@ -364,7 +341,6 @@ def fetch_recent_papers(
             if not results:
                 break
             
-            # Process each paper
             for paper in results:
                 processed = process_paper(paper)
                 if processed:
@@ -373,7 +349,6 @@ def fetch_recent_papers(
                     if len(papers) >= max_results:
                         break
             
-            # Get next page cursor
             meta = data.get("meta", {})
             cursor = meta.get("next_cursor")
             if not cursor:
@@ -391,7 +366,7 @@ def fetch_recent_papers(
     if progress_callback:
         progress_callback(len(papers), len(papers), "Complete")
     
-    logger.info(f"Fetched {len(papers)} papers from {len(selected_journals or [])} journals")
+    logger.info(f"Fetched {len(papers)} papers")
     return papers
 
 
