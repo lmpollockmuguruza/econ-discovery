@@ -2,28 +2,19 @@
 Gemini AI Processor for Literature Discovery
 Handles batch summarization, relevance scoring, and interest matching.
 
-UPDATED: Uses new google-genai SDK (google-generativeai is deprecated)
-Model: gemini-2.5-flash-lite (optimized for cost/latency)
+FIXED VERSION: Uses legacy google-generativeai SDK (more stable on Streamlit Cloud)
+with updated model names and better error handling.
 """
 
 import json
 import re
 from typing import Optional, Tuple
 
-# Try new SDK first, fall back to legacy
 try:
-    from google import genai
-    from google.genai import types
-    GENAI_SDK = "new"
+    import google.generativeai as genai
     GENAI_AVAILABLE = True
 except ImportError:
-    try:
-        import google.generativeai as genai_legacy
-        GENAI_SDK = "legacy"
-        GENAI_AVAILABLE = True
-    except ImportError:
-        GENAI_SDK = None
-        GENAI_AVAILABLE = False
+    GENAI_AVAILABLE = False
 
 
 # User Interest Matrix Options
@@ -100,14 +91,14 @@ METHODOLOGIES = [
     "Network Analysis"
 ]
 
-# Model options - from cheapest/fastest to most capable
-AVAILABLE_MODELS = {
-    "gemini-2.5-flash-lite": "Fastest, lowest cost - good for MVP",
-    "gemini-2.5-flash": "Balanced speed and quality",
-    "gemini-2.0-flash": "Legacy stable option",
-}
+# Models to try in order (will use first one that works)
+MODELS_TO_TRY = [
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-latest",
+]
 
-DEFAULT_MODEL = "gemini-2.5-flash-lite"
+DEFAULT_MODEL = "gemini-2.0-flash"
 
 
 def create_user_profile(
@@ -136,7 +127,7 @@ def build_ranking_prompt(user_profile: dict, papers: list, start_index: int) -> 
     
     papers_text = ""
     for i, p in enumerate(papers):
-        idx = start_index + i + 1  # 1-based index
+        idx = start_index + i + 1
         abstract = p.get('abstract', '')[:800]
         papers_text += f"""
 ---
@@ -173,79 +164,11 @@ Your JSON array:"""
 
 
 def get_sdk_info() -> dict:
-    """Return information about which SDK is being used."""
+    """Return information about SDK availability."""
     return {
-        "sdk": GENAI_SDK,
         "available": GENAI_AVAILABLE,
         "default_model": DEFAULT_MODEL,
-        "available_models": AVAILABLE_MODELS
     }
-
-
-def validate_api_key(api_key: str) -> Tuple[bool, str]:
-    """Validate the Gemini API key before processing."""
-    if not GENAI_AVAILABLE:
-        if GENAI_SDK is None:
-            return False, "No Gemini SDK installed. Run: pip install google-genai"
-        return False, "Gemini SDK import failed"
-    
-    if not api_key:
-        return False, "No API key provided"
-    
-    if len(api_key) < 30:
-        return False, "API key appears too short"
-    
-    try:
-        if GENAI_SDK == "new":
-            # New SDK: create client with API key
-            client = genai.Client(api_key=api_key)
-            # Test by listing models
-            models = list(client.models.list())
-            if not models:
-                return False, "Could not retrieve model list"
-            return True, f"API key validated (new SDK, {len(models)} models available)"
-        else:
-            # Legacy SDK
-            genai_legacy.configure(api_key=api_key)
-            models = list(genai_legacy.list_models())
-            if not models:
-                return False, "Could not retrieve model list"
-            return True, f"API key validated (legacy SDK)"
-            
-    except Exception as e:
-        error_str = str(e)
-        if "API_KEY" in error_str.upper() or "401" in error_str:
-            return False, "Invalid API key"
-        elif "QUOTA" in error_str.upper() or "429" in error_str:
-            return False, "API quota exceeded"
-        else:
-            return False, f"Validation error: {error_str[:100]}"
-
-
-def _generate_with_new_sdk(client, model: str, prompt: str) -> str:
-    """Generate content using the new google-genai SDK."""
-    response = client.models.generate_content(
-        model=model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            temperature=0.2,
-            max_output_tokens=2048,
-        )
-    )
-    return response.text
-
-
-def _generate_with_legacy_sdk(model_name: str, prompt: str) -> str:
-    """Generate content using the legacy google-generativeai SDK."""
-    model = genai_legacy.GenerativeModel(model_name)
-    response = model.generate_content(
-        prompt,
-        generation_config=genai_legacy.types.GenerationConfig(
-            temperature=0.2,
-            max_output_tokens=2048,
-        )
-    )
-    return response.text
 
 
 def process_papers_with_gemini(
@@ -253,29 +176,18 @@ def process_papers_with_gemini(
     user_profile: dict,
     papers: list,
     batch_size: int = 5,
-    model_name: str = DEFAULT_MODEL,
     progress_callback=None
 ) -> Tuple[list, list]:
     """
     Process papers through Gemini for ranking and summarization.
-    
-    Args:
-        api_key: Gemini API key
-        user_profile: User's research profile
-        papers: List of papers to analyze
-        batch_size: Papers per API call
-        model_name: Gemini model to use
-        progress_callback: Optional callback for progress updates
     
     Returns:
         Tuple of (enriched_papers, errors)
     """
     errors = []
     
-    # Validate prerequisites
     if not GENAI_AVAILABLE:
-        install_cmd = "pip install google-genai" if GENAI_SDK is None else "check import errors"
-        return _fallback_processing(papers), [f"Gemini SDK not available. {install_cmd}"]
+        return _fallback_processing(papers), ["google-generativeai package not installed. Run: pip install google-generativeai"]
     
     if not api_key:
         return _fallback_processing(papers), ["No Gemini API key provided"]
@@ -283,24 +195,41 @@ def process_papers_with_gemini(
     if not papers:
         return [], []
     
-    # Validate API key first
-    is_valid, validation_msg = validate_api_key(api_key)
-    if not is_valid:
-        errors.append(f"API Key Error: {validation_msg}")
-        return _fallback_processing(papers), errors
-    
-    # Initialize client/model based on SDK
+    # Configure API
     try:
-        if GENAI_SDK == "new":
-            client = genai.Client(api_key=api_key)
-        else:
-            genai_legacy.configure(api_key=api_key)
-            client = None
+        genai.configure(api_key=api_key)
     except Exception as e:
-        errors.append(f"Failed to initialize Gemini: {str(e)[:100]}")
+        errors.append(f"Failed to configure API: {str(e)[:100]}")
         return _fallback_processing(papers), errors
     
-    # Store results by original paper index
+    # Find a working model
+    model = None
+    working_model_name = None
+    
+    for model_name in MODELS_TO_TRY:
+        try:
+            model = genai.GenerativeModel(model_name)
+            # Quick test
+            test_response = model.generate_content("Say 'ok'")
+            if test_response.text:
+                working_model_name = model_name
+                break
+        except Exception as e:
+            error_str = str(e)
+            if "API_KEY" in error_str.upper() or "401" in error_str:
+                errors.append("Invalid API key")
+                return _fallback_processing(papers), errors
+            elif "QUOTA" in error_str.upper() or "429" in error_str:
+                errors.append("API quota exceeded. Wait a few minutes.")
+                return _fallback_processing(papers), errors
+            # Model not available, try next
+            continue
+    
+    if not model or not working_model_name:
+        errors.append("No working Gemini model found. Check your API key.")
+        return _fallback_processing(papers), errors
+    
+    # Store results
     results_by_index = {}
     total_batches = (len(papers) + batch_size - 1) // batch_size
     
@@ -310,70 +239,56 @@ def process_papers_with_gemini(
         start_index = i
         
         if progress_callback:
-            progress_callback(f"Processing batch {batch_num + 1}/{total_batches}...")
+            progress_callback(f"Batch {batch_num + 1}/{total_batches} ({working_model_name})...")
         
         prompt = build_ranking_prompt(user_profile, batch, start_index)
         
         try:
-            # Generate based on SDK version
-            if GENAI_SDK == "new":
-                response_text = _generate_with_new_sdk(client, model_name, prompt)
-            else:
-                # Legacy SDK - model names might differ
-                legacy_model = model_name
-                if model_name == "gemini-2.5-flash-lite":
-                    legacy_model = "gemini-1.5-flash"  # Fallback for legacy
-                response_text = _generate_with_legacy_sdk(legacy_model, prompt)
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.2,
+                    max_output_tokens=2048,
+                )
+            )
             
-            if not response_text:
-                errors.append(f"Batch {batch_num + 1}: Empty response from Gemini")
+            if not response.text:
+                errors.append(f"Batch {batch_num + 1}: Empty response")
                 continue
             
-            # Parse the response
-            rankings = parse_gemini_response(response_text)
+            rankings = parse_gemini_response(response.text)
             
             if not rankings:
-                preview = response_text[:200].replace('\n', ' ')
-                errors.append(f"Batch {batch_num + 1}: Could not parse JSON. Preview: {preview}...")
+                preview = response.text[:150].replace('\n', ' ')
+                errors.append(f"Batch {batch_num + 1}: Could not parse response: {preview}...")
                 continue
             
-            # Match results to papers
-            matched_count = 0
+            # Match results
             for ranking in rankings:
                 paper_num = ranking.get("paper_num")
                 if paper_num is not None:
                     original_index = paper_num - 1
                     if 0 <= original_index < len(papers):
                         results_by_index[original_index] = ranking
-                        matched_count += 1
-            
-            if matched_count == 0:
-                errors.append(f"Batch {batch_num + 1}: Parsed {len(rankings)} items but none matched")
                         
         except Exception as e:
             error_msg = str(e)
             if "API_KEY" in error_msg.upper() or "401" in error_msg:
-                errors.append("Invalid API key. Please check your Gemini API key.")
+                errors.append("Invalid API key")
                 break
             elif "QUOTA" in error_msg.upper() or "429" in error_msg:
-                errors.append("API quota exceeded. Try again later or reduce batch size.")
-                break
-            elif "SAFETY" in error_msg.upper() or "blocked" in error_msg.lower():
-                errors.append(f"Batch {batch_num + 1}: Content filtered by safety settings")
-            elif "not found" in error_msg.lower() or "404" in error_msg:
-                errors.append(f"Model '{model_name}' not found. Try 'gemini-2.0-flash' instead.")
+                errors.append("Quota exceeded. Try again later.")
                 break
             else:
-                errors.append(f"Batch {batch_num + 1} error: {error_msg[:150]}")
+                errors.append(f"Batch {batch_num + 1}: {error_msg[:100]}")
             continue
     
-    # Build enriched papers list
+    # Build results
     enriched_papers = []
     scored_count = 0
     
     for idx, paper in enumerate(papers):
         ranking = results_by_index.get(idx, {})
-        
         has_ai_analysis = bool(ranking.get("summary"))
         if has_ai_analysis:
             scored_count += 1
@@ -390,11 +305,12 @@ def process_papers_with_gemini(
     
     # Summary
     if scored_count == 0 and len(papers) > 0:
-        errors.insert(0, f"⚠️ AI analysis failed for ALL {len(papers)} papers. Check errors below.")
+        errors.insert(0, f"⚠️ AI failed for all {len(papers)} papers")
     elif scored_count < len(papers):
-        errors.insert(0, f"ℹ️ AI analyzed {scored_count}/{len(papers)} papers successfully.")
+        errors.insert(0, f"ℹ️ Analyzed {scored_count}/{len(papers)} papers")
+    else:
+        errors.insert(0, f"✓ Analyzed all {scored_count} papers with {working_model_name}")
     
-    # Sort by relevance score
     enriched_papers.sort(
         key=lambda x: (x.get("has_ai_analysis", False), x.get("relevance_score", 0)), 
         reverse=True
@@ -404,7 +320,7 @@ def process_papers_with_gemini(
 
 
 def _fallback_processing(papers: list) -> list:
-    """Fallback when AI processing isn't available."""
+    """Fallback when AI isn't available."""
     return [
         {
             **paper,
@@ -419,28 +335,27 @@ def _fallback_processing(papers: list) -> list:
 
 
 def parse_gemini_response(response_text: str) -> list:
-    """Parse Gemini's JSON response with robust error handling."""
+    """Parse Gemini's JSON response."""
     if not response_text:
         return []
     
     text = response_text.strip()
     
-    # Remove markdown code blocks
+    # Remove markdown
     text = re.sub(r'^```(?:json)?\s*', '', text)
     text = re.sub(r'\s*```$', '', text)
     text = text.strip()
     
-    # Try to find JSON array
+    # Find JSON array
     json_match = re.search(r'\[\s*\{[\s\S]*\}\s*\]', text)
     if json_match:
         text = json_match.group()
     
-    # Clean up common JSON issues
+    # Clean
     text = text.replace('\n', ' ')
     text = re.sub(r',\s*]', ']', text)
     text = re.sub(r',\s*}', '}', text)
     
-    # First attempt: direct parse
     try:
         result = json.loads(text)
         if isinstance(result, list):
@@ -450,17 +365,17 @@ def parse_gemini_response(response_text: str) -> list:
     except json.JSONDecodeError:
         pass
     
-    # Second attempt: find objects with paper_num
+    # Fallback: extract individual objects
     objects = []
     pattern = r'\{\s*"paper_num"\s*:\s*\d+[^}]*\}'
     matches = re.findall(pattern, text, re.DOTALL)
     
     for match in matches:
         try:
-            clean_match = re.sub(r',\s*}', '}', match)
-            obj = json.loads(clean_match)
+            clean = re.sub(r',\s*}', '}', match)
+            obj = json.loads(clean)
             objects.append(obj)
-        except json.JSONDecodeError:
+        except:
             continue
     
     return objects
