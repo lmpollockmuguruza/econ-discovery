@@ -29,6 +29,11 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
     
+    /* Force light background */
+    .stApp {
+        background-color: #ffffff !important;
+    }
+    
     * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
     
     #MainMenu, footer, header, .stDeployButton { display: none !important; }
@@ -36,46 +41,49 @@ st.markdown("""
     .block-container {
         max-width: 600px;
         padding: 3rem 1.5rem;
+        background-color: #ffffff;
     }
     
-    h1, h2, h3 { font-weight: 500; color: #111; letter-spacing: -0.02em; }
+    h1, h2, h3, h4, h5, h6, p, span, label, div {
+        color: #1a1a1a !important;
+    }
     
     .main-title {
-        font-size: 2.5rem;
-        font-weight: 300;
+        font-size: 2.5rem !important;
+        font-weight: 300 !important;
         text-align: center;
         margin-bottom: 0.25rem;
-        color: #111;
+        color: #1a1a1a !important;
         letter-spacing: -0.03em;
     }
     
     .main-sub {
-        font-size: 1rem;
+        font-size: 1rem !important;
         text-align: center;
-        color: #666;
+        color: #666666 !important;
         margin-bottom: 3rem;
         font-weight: 400;
     }
     
     .step-label {
-        font-size: 0.7rem;
+        font-size: 0.7rem !important;
         text-transform: uppercase;
         letter-spacing: 0.1em;
-        color: #999;
+        color: #888888 !important;
         margin-bottom: 0.5rem;
     }
     
     .step-title {
-        font-size: 1.75rem;
-        font-weight: 400;
-        color: #111;
+        font-size: 1.75rem !important;
+        font-weight: 400 !important;
+        color: #1a1a1a !important;
         margin-bottom: 0.5rem;
         letter-spacing: -0.02em;
     }
     
     .step-hint {
-        font-size: 0.9rem;
-        color: #666;
+        font-size: 0.9rem !important;
+        color: #666666 !important;
         margin-bottom: 2rem;
         line-height: 1.5;
     }
@@ -90,27 +98,30 @@ st.markdown("""
     }
     
     .stButton > button[kind="primary"] {
-        background: #111;
-        color: #fff;
-        border: none;
+        background: #1a1a1a !important;
+        color: #ffffff !important;
+        border: none !important;
     }
     
     .stButton > button[kind="primary"]:hover {
-        background: #333;
+        background: #333333 !important;
     }
     
     .stButton > button[kind="secondary"] {
-        background: #fff;
-        color: #111;
-        border: 1px solid #ddd;
+        background: #ffffff !important;
+        color: #1a1a1a !important;
+        border: 1px solid #dddddd !important;
     }
     
     .stSelectbox > div > div, .stMultiSelect > div > div {
         border-radius: 8px;
+        background-color: #ffffff !important;
     }
     
     .stTextInput > div > div > input {
         border-radius: 8px;
+        background-color: #ffffff !important;
+        color: #1a1a1a !important;
     }
     
     .progress-dots {
@@ -124,42 +135,42 @@ st.markdown("""
         width: 8px;
         height: 8px;
         border-radius: 50%;
-        background: #ddd;
+        background-color: #dddddd;
     }
     
-    .dot.active { background: #111; }
-    .dot.done { background: #111; }
+    .dot.active { background-color: #1a1a1a; }
+    .dot.done { background-color: #1a1a1a; }
     
     .paper-card {
-        border: 1px solid #eee;
+        border: 1px solid #eeeeee;
         border-radius: 12px;
         padding: 1.25rem;
         margin-bottom: 1rem;
-        background: #fff;
+        background-color: #ffffff;
     }
     
     .paper-card:hover {
-        border-color: #ccc;
+        border-color: #cccccc;
     }
     
     .paper-title {
-        font-size: 1rem;
-        font-weight: 500;
-        color: #111;
+        font-size: 1rem !important;
+        font-weight: 500 !important;
+        color: #1a1a1a !important;
         line-height: 1.4;
         margin-bottom: 0.5rem;
     }
     
     .paper-meta {
-        font-size: 0.8rem;
-        color: #888;
+        font-size: 0.8rem !important;
+        color: #666666 !important;
         margin-bottom: 0.75rem;
     }
     
     .paper-match {
-        font-size: 0.85rem;
-        color: #444;
-        background: #f9f9f9;
+        font-size: 0.85rem !important;
+        color: #444444 !important;
+        background-color: #f5f5f5;
         padding: 0.6rem 0.8rem;
         border-radius: 6px;
         margin-bottom: 0.75rem;
@@ -172,27 +183,27 @@ st.markdown("""
     }
     
     .tag {
-        font-size: 0.7rem;
+        font-size: 0.7rem !important;
         padding: 0.2rem 0.5rem;
         border-radius: 4px;
-        background: #f0f0f0;
-        color: #555;
+        background-color: #f0f0f0;
+        color: #555555 !important;
     }
     
-    .tag-method { background: #e8f4fd; color: #1a5f7a; }
-    .tag-interest { background: #f3e8fd; color: #5a1a7a; }
+    .tag-method { background-color: #e8f4fd; color: #1a5f7a !important; }
+    .tag-interest { background-color: #f3e8fd; color: #5a1a7a !important; }
     
     .score {
-        font-size: 0.85rem;
-        font-weight: 600;
-        color: #111;
+        font-size: 0.85rem !important;
+        font-weight: 600 !important;
+        color: #1a1a1a !important;
     }
     
-    .score-high { color: #1a7a3e; }
-    .score-med { color: #7a5a1a; }
+    .score-high { color: #1a7a3e !important; }
+    .score-med { color: #7a5a1a !important; }
     
     .summary-box {
-        background: #f9f9f9;
+        background-color: #f9f9f9;
         border-radius: 12px;
         padding: 1.5rem;
         margin-bottom: 2rem;
@@ -200,22 +211,46 @@ st.markdown("""
     }
     
     .summary-num {
-        font-size: 2.5rem;
-        font-weight: 300;
-        color: #111;
+        font-size: 2.5rem !important;
+        font-weight: 300 !important;
+        color: #1a1a1a !important;
     }
     
     .summary-label {
-        font-size: 0.8rem;
-        color: #888;
+        font-size: 0.8rem !important;
+        color: #666666 !important;
         text-transform: uppercase;
         letter-spacing: 0.05em;
     }
     
     .greeting {
-        font-size: 1.1rem;
-        color: #111;
+        font-size: 1.1rem !important;
+        color: #1a1a1a !important;
         margin-bottom: 2rem;
+    }
+    
+    /* Fix Streamlit's default dark mode overrides */
+    [data-testid="stMarkdownContainer"] p {
+        color: #1a1a1a !important;
+    }
+    
+    [data-testid="stMarkdownContainer"] {
+        color: #1a1a1a !important;
+    }
+    
+    .stSlider label, .stRadio label {
+        color: #1a1a1a !important;
+    }
+    
+    /* Expander styling */
+    .streamlit-expanderHeader {
+        color: #1a1a1a !important;
+        background-color: #f9f9f9 !important;
+    }
+    
+    .streamlit-expanderContent {
+        color: #444444 !important;
+        background-color: #ffffff !important;
     }
 </style>
 """, unsafe_allow_html=True)
