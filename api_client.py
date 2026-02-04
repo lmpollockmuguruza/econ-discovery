@@ -1,7 +1,6 @@
 """
-OpenAlex API Client for Literature Discovery
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Production-grade client with retry logic and comprehensive error handling.
+Econvery — OpenAlex API Client
+Fetches academic papers from top economics and political science journals.
 """
 
 import requests
@@ -18,22 +17,24 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class Journal:
-    """Immutable journal record."""
     name: str
     issn: str
     field: str
-    tier: int
+    tier: int  # 1=Top, 2=Excellent, 3=Very Good
 
 
 # Economics Journals
 ECONOMICS_JOURNALS: Dict[str, Journal] = {
+    # Tier 1 - Top 5
     "American Economic Review": Journal("American Economic Review", "0002-8282", "economics", 1),
     "Quarterly Journal of Economics": Journal("Quarterly Journal of Economics", "0033-5533", "economics", 1),
     "Journal of Political Economy": Journal("Journal of Political Economy", "0022-3808", "economics", 1),
     "Econometrica": Journal("Econometrica", "0012-9682", "economics", 1),
     "Review of Economic Studies": Journal("Review of Economic Studies", "0034-6527", "economics", 1),
+    # Tier 2 - Top Field
     "Journal of Finance": Journal("Journal of Finance", "0022-1082", "economics", 2),
     "Review of Financial Studies": Journal("Review of Financial Studies", "0893-9454", "economics", 2),
+    "Journal of Financial Economics": Journal("Journal of Financial Economics", "0304-405X", "economics", 2),
     "Journal of Monetary Economics": Journal("Journal of Monetary Economics", "0304-3932", "economics", 2),
     "Journal of Economic Theory": Journal("Journal of Economic Theory", "0022-0531", "economics", 2),
     "AEJ: Applied Economics": Journal("AEJ: Applied Economics", "1945-7782", "economics", 2),
@@ -42,18 +43,30 @@ ECONOMICS_JOURNALS: Dict[str, Journal] = {
     "AEJ: Microeconomics": Journal("AEJ: Microeconomics", "1945-7669", "economics", 2),
     "Journal of Labor Economics": Journal("Journal of Labor Economics", "0734-306X", "economics", 2),
     "Journal of Public Economics": Journal("Journal of Public Economics", "0047-2727", "economics", 2),
+    "Journal of Human Resources": Journal("Journal of Human Resources", "0022-166X", "economics", 2),
+    "Journal of Economic Perspectives": Journal("Journal of Economic Perspectives", "0895-3309", "economics", 2),
+    # Tier 3 - Excellent
     "Review of Economics and Statistics": Journal("Review of Economics and Statistics", "0034-6535", "economics", 3),
     "Journal of the European Economic Association": Journal("Journal of the European Economic Association", "1542-4766", "economics", 3),
     "Economic Journal": Journal("Economic Journal", "0013-0133", "economics", 3),
     "Journal of Development Economics": Journal("Journal of Development Economics", "0304-3878", "economics", 3),
     "Journal of International Economics": Journal("Journal of International Economics", "0022-1996", "economics", 3),
+    "Journal of Economic Growth": Journal("Journal of Economic Growth", "1381-4338", "economics", 3),
+    "American Economic Journal: Applied Economics": Journal("American Economic Journal: Applied Economics", "1945-7782", "economics", 3),
+    "Journal of Applied Econometrics": Journal("Journal of Applied Econometrics", "0883-7252", "economics", 3),
+    "Journal of Business & Economic Statistics": Journal("Journal of Business & Economic Statistics", "0735-0015", "economics", 3),
+    "Economic Policy": Journal("Economic Policy", "0266-4658", "economics", 3),
+    "Journal of Economic Literature": Journal("Journal of Economic Literature", "0022-0515", "economics", 3),
 }
 
 # Political Science Journals
 POLISCI_JOURNALS: Dict[str, Journal] = {
+    # Tier 1 - Top 3
     "American Political Science Review": Journal("American Political Science Review", "0003-0554", "polisci", 1),
     "American Journal of Political Science": Journal("American Journal of Political Science", "0092-5853", "polisci", 1),
     "Journal of Politics": Journal("Journal of Politics", "0022-3816", "polisci", 1),
+    # Tier 2 - Top Field
+    "Quarterly Journal of Political Science": Journal("Quarterly Journal of Political Science", "1554-0626", "polisci", 2),
     "British Journal of Political Science": Journal("British Journal of Political Science", "0007-1234", "polisci", 2),
     "World Politics": Journal("World Politics", "0043-8871", "polisci", 2),
     "Comparative Political Studies": Journal("Comparative Political Studies", "0010-4140", "polisci", 2),
@@ -61,24 +74,30 @@ POLISCI_JOURNALS: Dict[str, Journal] = {
     "Political Analysis": Journal("Political Analysis", "1047-1987", "polisci", 2),
     "Annual Review of Political Science": Journal("Annual Review of Political Science", "1094-2939", "polisci", 2),
     "Political Science Research and Methods": Journal("Political Science Research and Methods", "2049-8470", "polisci", 2),
+    "Journal of Conflict Resolution": Journal("Journal of Conflict Resolution", "0022-0027", "polisci", 2),
+    "International Security": Journal("International Security", "0162-2889", "polisci", 2),
+    # Tier 3 - Excellent
     "International Studies Quarterly": Journal("International Studies Quarterly", "0020-8833", "polisci", 3),
     "Comparative Politics": Journal("Comparative Politics", "0010-4159", "polisci", 3),
     "Political Behavior": Journal("Political Behavior", "0190-9320", "polisci", 3),
     "Public Opinion Quarterly": Journal("Public Opinion Quarterly", "0033-362X", "polisci", 3),
     "Legislative Studies Quarterly": Journal("Legislative Studies Quarterly", "0362-9805", "polisci", 3),
+    "European Journal of Political Research": Journal("European Journal of Political Research", "0304-4130", "polisci", 3),
+    "Journal of Peace Research": Journal("Journal of Peace Research", "0022-3433", "polisci", 3),
+    "Political Science Quarterly": Journal("Political Science Quarterly", "0032-3195", "polisci", 3),
+    "Perspectives on Politics": Journal("Perspectives on Politics", "1537-5927", "polisci", 3),
 }
 
 ALL_JOURNALS: Dict[str, Journal] = {**ECONOMICS_JOURNALS, **POLISCI_JOURNALS}
 
 
 class OpenAlexConfig:
-    """API configuration constants."""
     BASE_URL = "https://api.openalex.org/works"
     TIMEOUT = 30
     MAX_RETRIES = 3
     RETRY_DELAY = 1.0
     RATE_LIMIT_DELAY = 0.1
-    POLITE_EMAIL = "literature-discovery@example.com"
+    POLITE_EMAIL = "econvery@research.app"
     SELECT_FIELDS = ",".join([
         "id", "doi", "title", "authorships", "publication_date",
         "primary_location", "abstract_inverted_index", "concepts",
@@ -87,12 +106,10 @@ class OpenAlexConfig:
 
 
 class OpenAlexError(Exception):
-    """Base exception for OpenAlex API errors."""
     pass
 
 
 def reconstruct_abstract(abstract_inverted_index: Optional[dict]) -> str:
-    """Reconstruct plaintext abstract from OpenAlex's inverted index format."""
     if not abstract_inverted_index:
         return ""
     try:
@@ -108,15 +125,12 @@ def reconstruct_abstract(abstract_inverted_index: Optional[dict]) -> str:
 
 
 def _make_request_with_retry(url: str, params: dict, max_retries: int = 3) -> dict:
-    """Make API request with exponential backoff retry logic."""
     last_error = None
-    
     for attempt in range(max_retries):
         try:
             response = requests.get(url, params=params, timeout=OpenAlexConfig.TIMEOUT)
             if response.status_code == 429:
-                wait_time = OpenAlexConfig.RETRY_DELAY * (2 ** attempt)
-                time.sleep(wait_time)
+                time.sleep(OpenAlexConfig.RETRY_DELAY * (2 ** attempt))
                 continue
             response.raise_for_status()
             return response.json()
@@ -130,15 +144,12 @@ def _make_request_with_retry(url: str, params: dict, max_retries: int = 3) -> di
             raise OpenAlexError(last_error)
         except requests.exceptions.RequestException as e:
             last_error = str(e)
-        
         if attempt < max_retries - 1:
             time.sleep(OpenAlexConfig.RETRY_DELAY * (2 ** attempt))
-    
     raise OpenAlexError(f"Failed after {max_retries} attempts: {last_error}")
 
 
 def process_paper(paper: dict) -> Optional[dict]:
-    """Process a single paper from OpenAlex response into clean format."""
     title = paper.get("title")
     if not title:
         return None
@@ -146,7 +157,7 @@ def process_paper(paper: dict) -> Optional[dict]:
     abstract_index = paper.get("abstract_inverted_index")
     abstract = reconstruct_abstract(abstract_index)
     
-    if not abstract or len(abstract) < 100:
+    if not abstract or len(abstract) < 80:
         return None
     
     authors = []
@@ -170,7 +181,7 @@ def process_paper(paper: dict) -> Optional[dict]:
     concepts = []
     for concept in paper.get("concepts", [])[:8]:
         score = concept.get("score", 0)
-        if score > 0.25:
+        if score > 0.2:
             concepts.append({
                 "name": concept.get("display_name"),
                 "score": round(score, 2)
@@ -201,7 +212,6 @@ def process_paper(paper: dict) -> Optional[dict]:
         "cited_by_count": paper.get("cited_by_count", 0),
         "is_open_access": is_open_access,
         "oa_url": oa_url,
-        "work_type": paper.get("type", "article")
     }
 
 
@@ -210,9 +220,7 @@ def fetch_recent_papers(
     selected_journals: Optional[List[str]] = None,
     per_page: int = 50,
     max_results: int = 100,
-    progress_callback: Optional[callable] = None
 ) -> List[dict]:
-    """Fetch recent papers from OpenAlex API for specified journals."""
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days_back)
     from_date = start_date.strftime("%Y-%m-%d")
@@ -229,16 +237,10 @@ def fetch_recent_papers(
     issn_filter = "|".join(issns)
     papers: List[dict] = []
     cursor = "*"
-    page_num = 0
     
     while len(papers) < max_results:
         params = {
-            "filter": (
-                f"primary_location.source.issn:{issn_filter},"
-                f"from_publication_date:{from_date},"
-                f"to_publication_date:{to_date},"
-                f"type:article"
-            ),
+            "filter": f"primary_location.source.issn:{issn_filter},from_publication_date:{from_date},to_publication_date:{to_date},type:article",
             "per_page": min(per_page, max_results - len(papers)),
             "cursor": cursor,
             "select": OpenAlexConfig.SELECT_FIELDS,
@@ -246,9 +248,6 @@ def fetch_recent_papers(
         }
         
         try:
-            if progress_callback:
-                progress_callback(len(papers), max_results, f"Fetching page {page_num + 1}...")
-            
             data = _make_request_with_retry(OpenAlexConfig.BASE_URL, params)
             results = data.get("results", [])
             if not results:
@@ -266,9 +265,7 @@ def fetch_recent_papers(
             if not cursor:
                 break
             
-            page_num += 1
             time.sleep(OpenAlexConfig.RATE_LIMIT_DELAY)
-            
         except OpenAlexError:
             raise
         except Exception as e:
@@ -291,16 +288,15 @@ def get_all_journals() -> List[str]:
 
 @lru_cache(maxsize=1)
 def get_journal_options() -> dict:
-    """Return structured journal options for UI display."""
     return {
         "economics": {
-            "top5": [n for n, j in ECONOMICS_JOURNALS.items() if j.tier == 1],
-            "field": [n for n, j in ECONOMICS_JOURNALS.items() if j.tier == 2],
-            "excellent": [n for n, j in ECONOMICS_JOURNALS.items() if j.tier == 3],
+            "tier1": [n for n, j in ECONOMICS_JOURNALS.items() if j.tier == 1],
+            "tier2": [n for n, j in ECONOMICS_JOURNALS.items() if j.tier == 2],
+            "tier3": [n for n, j in ECONOMICS_JOURNALS.items() if j.tier == 3],
         },
         "polisci": {
-            "top3": [n for n, j in POLISCI_JOURNALS.items() if j.tier == 1],
-            "field": [n for n, j in POLISCI_JOURNALS.items() if j.tier == 2],
-            "excellent": [n for n, j in POLISCI_JOURNALS.items() if j.tier == 3],
+            "tier1": [n for n, j in POLISCI_JOURNALS.items() if j.tier == 1],
+            "tier2": [n for n, j in POLISCI_JOURNALS.items() if j.tier == 2],
+            "tier3": [n for n, j in POLISCI_JOURNALS.items() if j.tier == 3],
         }
     }
