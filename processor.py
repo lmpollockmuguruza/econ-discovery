@@ -1,9 +1,41 @@
 """
-Econvery — Semantic Matching Engine
-Gold-standard weighted keyword matching for academic paper discovery.
+Econvery — Relevance Scoring Engine
+===================================
+
+A principled approach to matching academic papers to researcher profiles.
+
+SCORING PHILOSOPHY
+------------------
+We use multiple independent signals, each interpretable on its own:
+
+1. CONCEPT MATCH (Primary Signal)
+   - OpenAlex extracts ML-classified concepts with confidence scores
+   - We map user interests → OpenAlex concept names
+   - This is our most reliable signal (pre-computed by ML, not keyword hacking)
+
+2. KEYWORD MATCH (Secondary Signal)  
+   - Searches title + abstract for domain-specific terms
+   - Uses canonical terms + synonyms to catch variations
+   - Weighted by term specificity (rare terms = stronger signal)
+
+3. METHOD DETECTION
+   - Looks for methodology-specific vocabulary
+   - Methods are usually explicitly stated in abstracts
+   
+4. QUALITY SIGNALS
+   - Journal tier (reliable proxy for quality)
+   - Citation count (for papers with time to accumulate)
+
+SCORE INTERPRETATION
+--------------------
+Final scores are calibrated to be meaningful:
+- 8.5-10.0: Directly relevant — multiple strong matches
+- 7.0-8.4:  Highly relevant — at least one strong match  
+- 5.0-6.9:  Moderately relevant — partial matches
+- 3.0-4.9:  Tangentially relevant — weak connections
+- 1.0-2.9:  Low relevance — minimal overlap
 """
 
-import math
 import re
 from typing import List, Dict, Set, Tuple, Optional
 from dataclasses import dataclass
@@ -11,7 +43,7 @@ from functools import lru_cache
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# OPTIONS
+# CONFIGURATION OPTIONS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ACADEMIC_LEVELS = [
@@ -54,351 +86,427 @@ REGIONS = [
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# WEIGHTED KEYWORD TAXONOMIES (abbreviated for brevity - full version has more)
-# Format: keyword -> weight (1.0 = core, 0.7 = strong, 0.4 = related)
+# CONCEPT MAPPING
+# Maps user-facing interest names → OpenAlex concept names (case-insensitive)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-FIELD_KEYWORDS = {
-    "Microeconomics": {
-        "microeconomic": 1.0, "consumer": 0.8, "demand": 0.9, "supply": 0.9,
-        "equilibrium": 0.9, "utility": 1.0, "preference": 0.9, "choice": 0.8,
-        "optimization": 0.8, "market": 0.6, "price": 0.7, "elasticity": 0.9,
-        "welfare": 0.8, "efficiency": 0.8, "mechanism": 0.7, "incentive": 0.8,
-        "game theory": 1.0, "nash": 0.8, "moral hazard": 0.9, "adverse selection": 0.9,
-        "principal agent": 0.9, "asymmetric information": 0.9, "contract": 0.7
-    },
-    "Macroeconomics": {
-        "macroeconomic": 1.0, "gdp": 1.0, "growth": 0.8, "inflation": 1.0,
-        "unemployment": 0.9, "recession": 0.9, "business cycle": 1.0,
-        "aggregate": 0.8, "monetary": 0.8, "fiscal": 0.8, "central bank": 0.9,
-        "interest rate": 0.8, "consumption": 0.7, "investment": 0.7,
-        "dsge": 1.0, "new keynesian": 1.0, "phillips curve": 0.9,
-        "liquidity trap": 0.9, "quantitative easing": 0.9
-    },
-    "Econometrics": {
-        "econometric": 1.0, "estimation": 0.9, "regression": 0.8, "identification": 1.0,
-        "inference": 0.9, "estimator": 0.9, "consistent": 0.8, "unbiased": 0.8,
-        "heteroskedasticity": 0.9, "specification": 0.7, "maximum likelihood": 0.9,
-        "gmm": 1.0, "2sls": 1.0, "standard error": 0.8, "robust": 0.7,
-        "endogeneity": 1.0, "exogeneity": 0.9
-    },
-    "Labor Economics": {
-        "labor": 1.0, "wage": 1.0, "employment": 1.0, "unemployment": 0.9,
-        "worker": 0.9, "job": 0.7, "human capital": 1.0, "education": 0.7,
-        "skill": 0.9, "minimum wage": 1.0, "union": 0.9, "discrimination": 0.9,
-        "earnings": 0.9, "mobility": 0.8, "monopsony": 1.0, "labor supply": 1.0,
-        "labor demand": 1.0, "return to education": 1.0, "mincer": 0.9,
-        "automation": 0.8, "gig economy": 0.8, "immigrant": 0.8
-    },
-    "Public Economics": {
-        "public": 0.7, "tax": 1.0, "taxation": 1.0, "government": 0.7,
-        "fiscal": 0.8, "redistribution": 1.0, "welfare": 0.8, "social insurance": 1.0,
-        "public good": 1.0, "externality": 1.0, "public finance": 1.0,
-        "optimal taxation": 1.0, "tax incidence": 1.0, "deadweight loss": 1.0,
-        "mirrlees": 1.0, "evasion": 0.9, "compliance": 0.8
-    },
-    "International Economics": {
-        "international": 0.7, "trade": 1.0, "export": 0.9, "import": 0.9,
-        "tariff": 1.0, "globalization": 0.9, "exchange rate": 1.0,
-        "fdi": 1.0, "comparative advantage": 1.0, "gravity model": 1.0,
-        "heckscher ohlin": 1.0, "melitz": 0.9, "offshoring": 0.9
-    },
-    "Development Economics": {
-        "development": 1.0, "poverty": 1.0, "developing": 0.9, "aid": 0.9,
-        "microfinance": 0.9, "rural": 0.8, "agriculture": 0.8,
-        "conditional cash transfer": 1.0, "randomized": 0.7, "rct": 0.7,
-        "village": 0.7, "smallholder": 0.8, "property rights": 0.8
-    },
-    "Financial Economics": {
-        "financial": 0.9, "finance": 0.9, "asset": 0.9, "stock": 0.8,
-        "bond": 0.8, "return": 0.7, "risk": 0.8, "portfolio": 1.0,
-        "banking": 0.9, "credit": 0.9, "mortgage": 0.9, "capm": 1.0,
-        "efficient market": 1.0, "arbitrage": 0.9, "volatility": 0.9,
-        "fama french": 1.0, "bubble": 0.8, "crisis": 0.8
-    },
-    "Industrial Organization": {
-        "industrial organization": 1.0, "firm": 0.7, "market structure": 1.0,
-        "competition": 0.9, "monopoly": 1.0, "oligopoly": 1.0, "antitrust": 1.0,
-        "merger": 1.0, "entry": 0.8, "pricing": 0.8, "market power": 1.0,
-        "markup": 0.9, "concentration": 0.9, "bertrand": 0.9, "cournot": 0.9,
-        "collusion": 0.9, "platform": 0.8, "network effect": 0.9
-    },
-    "Behavioral Economics": {
-        "behavioral": 1.0, "psychology": 0.8, "bias": 1.0, "heuristic": 1.0,
-        "bounded rationality": 1.0, "prospect theory": 1.0, "loss aversion": 1.0,
-        "present bias": 1.0, "hyperbolic": 0.9, "nudge": 1.0, "framing": 1.0,
-        "anchoring": 1.0, "overconfidence": 0.9, "default": 0.8,
-        "choice architecture": 1.0, "self control": 0.9
-    },
-    "Health Economics": {
-        "health": 1.0, "healthcare": 1.0, "hospital": 0.9, "physician": 0.9,
-        "insurance": 0.8, "medicare": 1.0, "medicaid": 1.0, "pharmaceutical": 0.9,
-        "mortality": 1.0, "morbidity": 0.9, "aca": 0.9, "obamacare": 0.8
-    },
-    "Environmental Economics": {
-        "environmental": 1.0, "climate": 1.0, "carbon": 1.0, "emission": 1.0,
-        "pollution": 1.0, "energy": 0.8, "renewable": 0.9, "cap and trade": 1.0,
-        "carbon tax": 1.0, "social cost of carbon": 1.0
-    },
-    "Urban Economics": {
-        "urban": 1.0, "city": 1.0, "housing": 1.0, "rent": 0.9, "zoning": 1.0,
-        "agglomeration": 1.0, "spatial": 0.9, "neighborhood": 0.9,
-        "gentrification": 1.0, "segregation": 0.9, "rent control": 1.0
-    },
-    "Economic History": {
-        "history": 0.8, "historical": 0.8, "persistence": 1.0, "colonial": 1.0,
-        "industrial revolution": 1.0, "great depression": 1.0, "slavery": 0.9,
-        "cliometric": 1.0, "path dependence": 0.9
-    },
-    "Political Economy": {
-        "political economy": 1.0, "institution": 1.0, "democracy": 1.0,
-        "autocracy": 1.0, "regime": 0.9, "corruption": 1.0, "state capacity": 1.0,
-        "rent seeking": 1.0, "median voter": 1.0, "lobbying": 1.0
-    },
-    "Comparative Politics": {
-        "comparative": 1.0, "regime": 1.0, "democratization": 1.0,
-        "parliament": 0.9, "coalition": 0.9, "party": 0.8, "electoral system": 1.0,
-        "proportional": 0.8, "federalism": 0.8
-    },
-    "International Relations": {
-        "international relations": 1.0, "conflict": 1.0, "war": 1.0,
-        "peace": 0.9, "diplomacy": 0.9, "alliance": 0.9, "sanction": 1.0,
-        "nuclear": 0.9, "terrorism": 0.9, "cooperation": 0.9
-    },
-    "American Politics": {
-        "congress": 1.0, "senate": 0.9, "president": 0.9, "supreme court": 0.9,
-        "partisan": 1.0, "republican": 0.9, "democrat": 0.9, "polarization": 1.0,
-        "filibuster": 0.9, "gerrymandering": 1.0
-    },
-    "Public Policy": {
-        "public policy": 1.0, "policy evaluation": 1.0, "regulation": 0.9,
-        "reform": 0.8, "effectiveness": 0.8, "cost benefit": 1.0,
-        "evidence based": 0.9, "implementation": 0.8
-    },
-    "Political Methodology": {
-        "methodology": 0.9, "causal inference": 1.0, "identification": 1.0,
-        "experiment": 0.8, "measurement": 0.9, "formal model": 0.9
-    }
+INTEREST_TO_CONCEPTS: Dict[str, List[str]] = {
+    "Causal Inference": [
+        "causal inference", "causality", "treatment effect", "instrumental variable",
+        "regression discontinuity", "natural experiment", "randomized experiment",
+        "econometrics", "identification"
+    ],
+    "Machine Learning": [
+        "machine learning", "artificial intelligence", "deep learning", 
+        "neural network", "prediction", "statistical learning", "data science"
+    ],
+    "Field Experiments": [
+        "randomized controlled trial", "field experiment", "randomized experiment",
+        "experimental economics", "rct", "experiment"
+    ],
+    "Natural Experiments": [
+        "natural experiment", "quasi-experiment", "regression discontinuity",
+        "instrumental variable", "difference in differences", "policy evaluation"
+    ],
+    "Structural Estimation": [
+        "structural estimation", "structural model", "discrete choice",
+        "demand estimation", "dynamic programming", "industrial organization"
+    ],
+    "Mechanism Design": [
+        "mechanism design", "auction", "matching", "market design",
+        "game theory", "information economics", "contract theory"
+    ],
+    "Policy Evaluation": [
+        "policy evaluation", "program evaluation", "impact evaluation",
+        "policy analysis", "cost-benefit analysis", "public policy"
+    ],
+    "Inequality": [
+        "inequality", "income distribution", "wealth distribution",
+        "economic inequality", "income inequality", "social mobility",
+        "poverty", "redistribution", "gini"
+    ],
+    "Climate and Energy": [
+        "climate change", "climate economics", "environmental economics",
+        "energy economics", "carbon", "renewable energy", "emissions",
+        "pollution", "sustainability"
+    ],
+    "Education": [
+        "education economics", "education", "human capital", "school",
+        "student achievement", "higher education", "returns to education",
+        "teacher", "college"
+    ],
+    "Housing": [
+        "housing", "real estate", "housing market", "rent", "mortgage",
+        "urban economics", "housing policy", "homeownership", "zoning"
+    ],
+    "Trade": [
+        "international trade", "trade policy", "globalization", "tariff",
+        "trade agreement", "export", "import", "comparative advantage"
+    ],
+    "Monetary Policy": [
+        "monetary policy", "central bank", "interest rate", "inflation",
+        "money supply", "federal reserve", "monetary economics", "banking"
+    ],
+    "Fiscal Policy": [
+        "fiscal policy", "government spending", "taxation", "public debt",
+        "budget deficit", "stimulus", "public finance"
+    ],
+    "Innovation": [
+        "innovation", "technological change", "patent", "r&d",
+        "entrepreneurship", "productivity", "technology", "startup"
+    ],
+    "Gender": [
+        "gender", "gender economics", "gender gap", "discrimination",
+        "female labor", "wage gap", "women", "family economics"
+    ],
+    "Crime and Justice": [
+        "crime", "criminal justice", "law enforcement", "prison",
+        "incarceration", "policing", "recidivism", "law and economics"
+    ],
+    "Health": [
+        "health economics", "healthcare", "public health", "mortality",
+        "health insurance", "epidemiology", "medical", "hospital"
+    ],
+    "Immigration": [
+        "immigration", "migration", "immigrant", "refugee",
+        "labor migration", "international migration", "asylum"
+    ],
+    "Elections and Voting": [
+        "election", "voting", "political economy", "voter turnout",
+        "electoral", "democracy", "political participation", "campaign"
+    ],
+    "Conflict and Security": [
+        "conflict", "war", "civil war", "political violence",
+        "security", "peace", "military", "international relations"
+    ],
+    "Social Mobility": [
+        "social mobility", "intergenerational mobility", "economic mobility",
+        "income mobility", "opportunity", "inequality"
+    ],
+    "Poverty and Welfare": [
+        "poverty", "welfare", "social protection", "transfer program",
+        "food stamps", "social assistance", "safety net", "aid"
+    ],
+    "Labor Markets": [
+        "labor market", "labor economics", "employment", "unemployment",
+        "wage", "job search", "labor supply", "labor demand", "minimum wage"
+    ],
+    "Taxation": [
+        "taxation", "tax policy", "income tax", "tax evasion",
+        "optimal taxation", "tax incidence", "corporate tax", "public finance"
+    ],
+    "Development": [
+        "development economics", "economic development", "poverty",
+        "developing country", "foreign aid", "microfinance", "growth"
+    ]
 }
 
-INTEREST_KEYWORDS = {
-    "Causal Inference": {
-        "causal": 1.0, "causality": 1.0, "identification": 1.0, "endogeneity": 1.0,
-        "treatment effect": 1.0, "counterfactual": 1.0, "selection": 0.7,
-        "confounding": 0.9, "instrumental": 0.9, "difference in differences": 1.0,
-        "potential outcome": 1.0, "average treatment effect": 1.0, "ate": 0.8,
-        "late": 0.9, "exclusion restriction": 1.0, "parallel trends": 1.0,
-        "event study": 0.9, "placebo": 0.9, "robustness": 0.7
-    },
-    "Machine Learning": {
-        "machine learning": 1.0, "neural network": 1.0, "deep learning": 1.0,
-        "prediction": 0.8, "random forest": 1.0, "lasso": 1.0, "regularization": 0.9,
-        "cross validation": 1.0, "causal forest": 1.0, "double machine learning": 1.0
-    },
-    "Field Experiments": {
-        "randomized": 1.0, "rct": 1.0, "randomized controlled trial": 1.0,
-        "experiment": 0.8, "random assignment": 1.0, "treatment": 0.7,
-        "control group": 0.9, "field experiment": 1.0, "intent to treat": 1.0,
-        "compliance": 0.8, "attrition": 0.9, "spillover": 0.9
-    },
-    "Natural Experiments": {
-        "natural experiment": 1.0, "quasi experiment": 1.0, "exogenous shock": 1.0,
-        "regression discontinuity": 1.0, "instrumental variable": 1.0,
-        "difference in differences": 1.0, "cutoff": 0.9, "threshold": 0.9,
-        "lottery": 0.9, "policy change": 0.8
-    },
-    "Structural Estimation": {
-        "structural": 1.0, "structural estimation": 1.0, "discrete choice": 1.0,
-        "blp": 1.0, "demand estimation": 1.0, "counterfactual": 0.8,
-        "simulation": 0.8, "dynamic discrete choice": 1.0
-    },
-    "Mechanism Design": {
-        "mechanism design": 1.0, "incentive compatible": 1.0, "auction": 1.0,
-        "matching": 0.9, "optimal mechanism": 1.0, "vickrey": 1.0,
-        "gale shapley": 1.0, "market design": 1.0
-    },
-    "Policy Evaluation": {
-        "policy evaluation": 1.0, "program evaluation": 1.0, "impact": 0.7,
-        "effectiveness": 0.9, "cost benefit": 1.0, "welfare": 0.7,
-        "external validity": 0.9, "heterogeneous effect": 0.9
-    },
-    "Inequality": {
-        "inequality": 1.0, "redistribution": 0.9, "income distribution": 1.0,
-        "wealth": 0.9, "gini": 1.0, "top income": 1.0, "mobility": 0.8,
-        "intergenerational": 1.0, "piketty": 0.9, "saez": 0.9
-    },
-    "Climate and Energy": {
-        "climate": 1.0, "climate change": 1.0, "carbon": 1.0, "emission": 1.0,
-        "energy": 0.9, "renewable": 0.9, "fossil fuel": 0.9, "carbon tax": 1.0,
-        "cap and trade": 1.0, "social cost of carbon": 1.0
-    },
-    "Education": {
-        "education": 1.0, "school": 1.0, "student": 0.9, "teacher": 0.9,
-        "test score": 1.0, "achievement": 0.9, "college": 0.9, "charter": 0.9,
-        "voucher": 0.9, "class size": 1.0, "return to education": 1.0
-    },
-    "Housing": {
-        "housing": 1.0, "house price": 1.0, "rent": 0.9, "mortgage": 1.0,
-        "homeownership": 1.0, "zoning": 0.9, "affordability": 1.0,
-        "rent control": 1.0, "eviction": 0.9
-    },
-    "Trade": {
-        "trade": 1.0, "tariff": 1.0, "import": 0.9, "export": 0.9,
-        "globalization": 1.0, "china shock": 1.0, "offshoring": 0.9,
-        "trade war": 0.9, "comparative advantage": 0.9
-    },
-    "Monetary Policy": {
-        "monetary policy": 1.0, "central bank": 1.0, "federal reserve": 1.0,
-        "interest rate": 0.9, "inflation": 0.8, "quantitative easing": 1.0,
-        "zero lower bound": 1.0, "forward guidance": 1.0
-    },
-    "Fiscal Policy": {
-        "fiscal policy": 1.0, "government spending": 1.0, "stimulus": 1.0,
-        "austerity": 1.0, "multiplier": 1.0, "deficit": 0.9, "debt": 0.8
-    },
-    "Innovation": {
-        "innovation": 1.0, "patent": 1.0, "r&d": 1.0, "startup": 0.9,
-        "entrepreneur": 0.9, "productivity": 0.9, "technology": 0.8,
-        "creative destruction": 0.9
-    },
-    "Gender": {
-        "gender": 1.0, "wage gap": 1.0, "women": 0.9, "discrimination": 0.9,
-        "motherhood penalty": 1.0, "child penalty": 1.0, "fertility": 0.9,
-        "parental leave": 0.9
-    },
-    "Crime and Justice": {
-        "crime": 1.0, "criminal": 0.9, "police": 1.0, "prison": 1.0,
-        "incarceration": 1.0, "recidivism": 1.0, "sentencing": 0.9,
-        "deterrence": 0.9
-    },
-    "Health": {
-        "health": 1.0, "mortality": 1.0, "life expectancy": 1.0,
-        "disease": 0.9, "obesity": 0.9, "mental health": 0.9,
-        "pandemic": 0.9, "vaccine": 0.9
-    },
-    "Immigration": {
-        "immigration": 1.0, "immigrant": 1.0, "migration": 1.0,
-        "refugee": 0.9, "border": 0.9, "undocumented": 1.0,
-        "assimilation": 0.9
-    },
-    "Elections and Voting": {
-        "election": 1.0, "voting": 1.0, "voter": 1.0, "turnout": 1.0,
-        "campaign": 0.9, "polling": 0.9, "redistricting": 1.0,
-        "gerrymandering": 1.0
-    },
-    "Conflict and Security": {
-        "conflict": 1.0, "war": 1.0, "peace": 0.9, "terrorism": 1.0,
-        "civil war": 1.0, "military": 0.9
-    },
-    "Social Mobility": {
-        "mobility": 1.0, "intergenerational": 1.0, "upward mobility": 1.0,
-        "opportunity": 0.9, "american dream": 0.8, "chetty": 0.8
-    },
-    "Poverty and Welfare": {
-        "poverty": 1.0, "welfare": 1.0, "food stamps": 0.9, "snap": 0.9,
-        "safety net": 1.0, "eitc": 1.0, "tanf": 0.9
-    },
-    "Labor Markets": {
-        "labor market": 1.0, "employment": 0.9, "unemployment": 0.9,
-        "hiring": 0.9, "vacancy": 0.9, "job search": 0.9, "wage": 0.8
-    },
-    "Taxation": {
-        "tax": 1.0, "taxation": 1.0, "income tax": 1.0, "corporate tax": 1.0,
-        "wealth tax": 1.0, "evasion": 0.9, "optimal taxation": 1.0
-    },
-    "Development": {
-        "development": 1.0, "developing country": 0.9, "poverty": 0.8,
-        "aid": 0.9, "microfinance": 0.9, "world bank": 0.8
-    }
-}
-
-METHOD_KEYWORDS = {
-    "Difference-in-Differences": {
-        "difference in differences": 1.0, "diff in diff": 1.0, "did": 0.8,
-        "parallel trends": 1.0, "event study": 0.9, "two way fixed effects": 1.0,
-        "staggered": 1.0, "callaway santanna": 0.9, "sun abraham": 0.9,
-        "goodman bacon": 0.9, "pretrend": 0.9
-    },
-    "Regression Discontinuity": {
-        "regression discontinuity": 1.0, "rdd": 1.0, "discontinuity": 0.9,
-        "cutoff": 1.0, "threshold": 0.9, "running variable": 1.0,
-        "bandwidth": 1.0, "local linear": 0.9, "fuzzy": 0.9, "sharp": 0.9,
-        "rdrobust": 0.9
-    },
-    "Instrumental Variables": {
-        "instrumental variable": 1.0, "iv": 0.9, "instrument": 1.0,
-        "two stage": 0.9, "2sls": 1.0, "exclusion restriction": 1.0,
-        "first stage": 1.0, "weak instrument": 1.0, "late": 0.9
-    },
-    "Randomized Experiments": {
-        "randomized": 1.0, "rct": 1.0, "random assignment": 1.0,
-        "experiment": 0.8, "treatment": 0.7, "control": 0.6,
-        "intent to treat": 1.0, "attrition": 0.9
-    },
-    "Structural Models": {
-        "structural model": 1.0, "structural estimation": 1.0,
-        "discrete choice": 1.0, "blp": 1.0, "demand estimation": 1.0,
-        "counterfactual simulation": 1.0
-    },
-    "Machine Learning Methods": {
-        "machine learning": 1.0, "lasso": 1.0, "random forest": 1.0,
-        "causal forest": 1.0, "double machine learning": 1.0,
-        "cross validation": 0.9
-    },
-    "Panel Data": {
-        "panel data": 1.0, "fixed effects": 1.0, "random effects": 0.9,
-        "within estimator": 0.9, "hausman": 1.0, "arellano bond": 1.0
-    },
-    "Time Series": {
-        "time series": 1.0, "var": 0.9, "cointegration": 1.0,
-        "granger causality": 1.0, "impulse response": 1.0
-    },
-    "Text Analysis": {
-        "text analysis": 1.0, "nlp": 1.0, "topic model": 1.0,
-        "sentiment": 0.9, "word embedding": 0.9
-    },
-    "Synthetic Control": {
-        "synthetic control": 1.0, "donor pool": 0.9, "abadie": 1.0,
-        "pre treatment fit": 0.9
-    },
-    "Bunching Estimation": {
-        "bunching": 1.0, "kink": 0.9, "notch": 0.9, "saez": 0.9, "kleven": 0.9
-    },
-    "Event Studies": {
-        "event study": 1.0, "abnormal return": 0.9, "announcement": 0.8
-    }
-}
-
-REGION_KEYWORDS = {
-    "Global": {"global": 1.0, "world": 0.8, "international": 0.7, "cross country": 0.9},
-    "United States": {"united states": 1.0, "us": 0.9, "american": 0.9, "america": 0.8},
-    "Europe": {"europe": 1.0, "european": 1.0, "eu": 0.9, "eurozone": 0.9},
-    "United Kingdom": {"united kingdom": 1.0, "uk": 0.9, "british": 0.9, "britain": 0.9},
-    "China": {"china": 1.0, "chinese": 1.0},
-    "India": {"india": 1.0, "indian": 1.0},
-    "Latin America": {"latin america": 1.0, "brazil": 0.9, "mexico": 0.9},
-    "Africa": {"africa": 1.0, "african": 1.0, "sub saharan": 0.9},
-    "Middle East": {"middle east": 1.0, "arab": 0.9},
-    "Southeast Asia": {"southeast asia": 1.0, "indonesia": 0.9, "vietnam": 0.9}
-}
-
-STOPWORDS = {
-    "a", "an", "the", "and", "or", "but", "if", "then", "else", "when",
-    "at", "by", "for", "with", "about", "against", "between", "into",
-    "through", "during", "before", "after", "above", "below", "to", "from",
-    "up", "down", "in", "out", "on", "off", "over", "under", "again",
-    "further", "once", "here", "there", "all", "each", "few", "more",
-    "most", "other", "some", "such", "no", "nor", "not", "only", "own",
-    "same", "so", "than", "too", "very", "can", "will", "just", "should",
-    "now", "also", "well", "even", "this", "that", "these", "those",
-    "am", "is", "are", "was", "were", "be", "been", "being", "have", "has",
-    "had", "do", "does", "did", "i", "you", "he", "she", "it", "we", "they",
-    "paper", "study", "article", "research", "find", "show", "result"
+FIELD_TO_CONCEPTS: Dict[str, List[str]] = {
+    "Microeconomics": ["microeconomics", "consumer behavior", "market", "game theory", "industrial organization", "welfare economics"],
+    "Macroeconomics": ["macroeconomics", "economic growth", "business cycle", "monetary economics", "gdp", "inflation"],
+    "Econometrics": ["econometrics", "statistical method", "causal inference", "estimation", "regression"],
+    "Labor Economics": ["labor economics", "wage", "employment", "human capital", "labor market", "unemployment"],
+    "Public Economics": ["public economics", "taxation", "public finance", "government", "welfare", "redistribution"],
+    "International Economics": ["international economics", "international trade", "exchange rate", "globalization", "tariff"],
+    "Development Economics": ["development economics", "poverty", "economic development", "foreign aid", "microfinance"],
+    "Financial Economics": ["finance", "financial economics", "asset pricing", "banking", "stock market", "credit"],
+    "Industrial Organization": ["industrial organization", "competition", "antitrust", "market structure", "monopoly"],
+    "Behavioral Economics": ["behavioral economics", "psychology", "decision making", "bounded rationality", "bias"],
+    "Health Economics": ["health economics", "healthcare", "health insurance", "medical", "mortality"],
+    "Environmental Economics": ["environmental economics", "climate", "pollution", "energy", "carbon"],
+    "Urban Economics": ["urban economics", "housing", "city", "real estate", "agglomeration", "rent"],
+    "Economic History": ["economic history", "history", "historical economics", "long run"],
+    "Political Economy": ["political economy", "institution", "democracy", "political economics", "voting"],
+    "Comparative Politics": ["comparative politics", "regime", "democracy", "political system", "government"],
+    "International Relations": ["international relations", "foreign policy", "diplomacy", "conflict", "war"],
+    "American Politics": ["american politics", "congress", "election", "united states", "president"],
+    "Public Policy": ["public policy", "policy analysis", "regulation", "government", "reform"],
+    "Political Methodology": ["political methodology", "quantitative methods", "causal inference", "measurement"]
 }
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# DATA
+# KEYWORD DEFINITIONS WITH SYNONYMS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@dataclass
+class KeywordEntry:
+    canonical: str
+    synonyms: List[str]
+    weight: float  # 0-1, higher = more diagnostic
+
+
+METHOD_KEYWORDS: Dict[str, KeywordEntry] = {
+    "Difference-in-Differences": KeywordEntry(
+        "difference-in-differences",
+        ["diff-in-diff", "did ", "difference in differences", "parallel trends", 
+         "two-way fixed effects", "twfe", "staggered", "event study", "pretrend",
+         "treated group", "control group", "treatment group"],
+        1.0
+    ),
+    "Regression Discontinuity": KeywordEntry(
+        "regression discontinuity",
+        ["rdd", "rd design", "discontinuity", "sharp rd", "fuzzy rd",
+         "running variable", "forcing variable", "cutoff", "threshold",
+         "bandwidth", "local polynomial"],
+        1.0
+    ),
+    "Instrumental Variables": KeywordEntry(
+        "instrumental variable",
+        ["iv ", " iv,", "instrument", "2sls", "two-stage", "tsls",
+         "exclusion restriction", "first stage", "first-stage", 
+         "weak instrument", "late", "local average treatment effect", "complier"],
+        1.0
+    ),
+    "Randomized Experiments": KeywordEntry(
+        "randomized",
+        ["rct", "randomized controlled trial", "randomized trial", "randomised",
+         "random assignment", "randomization", "field experiment", "lab experiment",
+         "experimental", "treatment group", "control group", "intent to treat",
+         "intention to treat", "randomly assigned", "random sample"],
+        1.0
+    ),
+    "Structural Models": KeywordEntry(
+        "structural model",
+        ["structural estimation", "structural approach", "discrete choice model",
+         "blp", "demand estimation", "supply estimation", "dynamic model",
+         "counterfactual simulation", "estimated model", "model estimation"],
+        1.0
+    ),
+    "Machine Learning Methods": KeywordEntry(
+        "machine learning",
+        ["lasso", "ridge regression", "elastic net", "random forest", 
+         "gradient boosting", "neural network", "deep learning", "causal forest",
+         "double ml", "cross-validation", "regularization", "prediction model",
+         "xgboost", "boosted"],
+        0.95
+    ),
+    "Panel Data": KeywordEntry(
+        "panel data",
+        ["fixed effects", "fixed effect", "random effects", "within estimator",
+         "longitudinal", "panel regression", "individual fixed effects", 
+         "time fixed effects", "entity fixed effects", "year fixed effects"],
+        0.85
+    ),
+    "Time Series": KeywordEntry(
+        "time series",
+        ["var ", "vector autoregression", "arima", "cointegration",
+         "granger causality", "impulse response", "forecast", "autoregressive"],
+        0.85
+    ),
+    "Text Analysis": KeywordEntry(
+        "text analysis",
+        ["nlp", "natural language processing", "text mining", "topic model",
+         "sentiment analysis", "word embedding", "text classification",
+         "lda", "word2vec", "corpus"],
+        0.95
+    ),
+    "Synthetic Control": KeywordEntry(
+        "synthetic control",
+        ["synthetic control method", "scm", "donor pool", "synthetic counterfactual",
+         "abadie", "comparative case study"],
+        1.0
+    ),
+    "Bunching Estimation": KeywordEntry(
+        "bunching",
+        ["bunching estimation", "bunching design", "kink", "notch",
+         "excess mass", "missing mass"],
+        1.0
+    ),
+    "Event Studies": KeywordEntry(
+        "event study",
+        ["event-study", "event window", "abnormal return", "announcement effect"],
+        0.9
+    )
+}
+
+INTEREST_KEYWORDS: Dict[str, KeywordEntry] = {
+    "Causal Inference": KeywordEntry(
+        "causal",
+        ["causal effect", "causal inference", "causality", "causal identification",
+         "identification strategy", "treatment effect", "causal impact",
+         "endogeneity", "selection bias", "omitted variable", "confounding",
+         "causal estimate", "causally"],
+        1.0
+    ),
+    "Inequality": KeywordEntry(
+        "inequality",
+        ["income inequality", "wealth inequality", "economic inequality",
+         "income distribution", "wealth distribution", "gini coefficient",
+         "top 1%", "top income", "top 10%", "redistribution", "intergenerational",
+         "income gap", "wage inequality", "earnings inequality"],
+        1.0
+    ),
+    "Education": KeywordEntry(
+        "education",
+        ["school", "student", "teacher", "college", "university",
+         "test score", "achievement gap", "graduation", "dropout",
+         "returns to education", "human capital", "educational attainment",
+         "classroom", "tuition", "enrollment", "academic"],
+        0.9
+    ),
+    "Housing": KeywordEntry(
+        "housing",
+        ["house price", "home price", "rent", "rental", "mortgage",
+         "homeownership", "housing market", "real estate", "zoning",
+         "affordability", "eviction", "homelessness", "tenant", "landlord",
+         "housing supply", "residential"],
+        1.0
+    ),
+    "Health": KeywordEntry(
+        "health",
+        ["healthcare", "hospital", "physician", "doctor", "patient",
+         "mortality", "morbidity", "life expectancy", "disease",
+         "health insurance", "medicare", "medicaid", "aca", "obamacare",
+         "medical", "clinical", "epidemic", "pandemic"],
+        0.9
+    ),
+    "Immigration": KeywordEntry(
+        "immigration",
+        ["immigrant", "migration", "migrant", "refugee", "asylum",
+         "foreign-born", "native-born", "undocumented", "visa", "border",
+         "deportation", "naturalization", "citizenship"],
+        1.0
+    ),
+    "Crime and Justice": KeywordEntry(
+        "crime",
+        ["criminal", "police", "policing", "prison", "incarceration",
+         "recidivism", "sentencing", "arrest", "violence", "homicide",
+         "theft", "robbery", "assault", "prosecution", "conviction"],
+        1.0
+    ),
+    "Gender": KeywordEntry(
+        "gender",
+        ["female", "women", "woman", "male", "men", "sex difference",
+         "gender gap", "wage gap", "discrimination", "motherhood",
+         "child penalty", "fertility", "family", "maternity", "paternity"],
+        0.9
+    ),
+    "Climate and Energy": KeywordEntry(
+        "climate",
+        ["climate change", "global warming", "carbon", "emissions",
+         "greenhouse gas", "renewable", "energy", "fossil fuel",
+         "carbon tax", "cap and trade", "electricity", "solar", "wind",
+         "environmental", "pollution", "clean energy"],
+        1.0
+    ),
+    "Trade": KeywordEntry(
+        "trade",
+        ["international trade", "tariff", "import", "export",
+         "globalization", "trade policy", "trade war", "china shock",
+         "offshoring", "outsourcing", "comparative advantage", "wto",
+         "trade agreement", "trade liberalization"],
+        1.0
+    ),
+    "Labor Markets": KeywordEntry(
+        "labor",
+        ["labour", "employment", "unemployment", "wage", "wages",
+         "worker", "job", "hiring", "layoff", "minimum wage",
+         "labor supply", "labor demand", "earnings", "workforce",
+         "occupation", "employer", "employee"],
+        0.85
+    ),
+    "Poverty and Welfare": KeywordEntry(
+        "poverty",
+        ["poor", "welfare", "social assistance", "transfer",
+         "food stamp", "snap", "eitc", "safety net", "benefit",
+         "low-income", "low income", "disadvantaged", "tanf"],
+        1.0
+    ),
+    "Taxation": KeywordEntry(
+        "tax",
+        ["taxation", "income tax", "corporate tax", "tax rate",
+         "tax evasion", "tax avoidance", "tax policy", "tax reform",
+         "marginal tax", "progressive tax", "tax revenue", "taxpayer"],
+        1.0
+    ),
+    "Monetary Policy": KeywordEntry(
+        "monetary policy",
+        ["central bank", "federal reserve", "fed ", "interest rate",
+         "inflation", "money supply", "quantitative easing", "qe",
+         "zero lower bound", "monetary transmission"],
+        1.0
+    ),
+    "Fiscal Policy": KeywordEntry(
+        "fiscal",
+        ["government spending", "fiscal policy", "stimulus", "austerity",
+         "deficit", "debt", "multiplier", "budget", "public spending"],
+        1.0
+    ),
+    "Innovation": KeywordEntry(
+        "innovation",
+        ["patent", "r&d", "research and development", "invention",
+         "entrepreneur", "startup", "technology", "productivity",
+         "technological change", "creative destruction"],
+        0.9
+    ),
+    "Development": KeywordEntry(
+        "development",
+        ["developing country", "developing world", "poor country",
+         "foreign aid", "microfinance", "microcredit", "poverty reduction",
+         "economic development", "third world", "global south"],
+        0.9
+    ),
+    "Elections and Voting": KeywordEntry(
+        "election",
+        ["vote", "voting", "voter", "ballot", "electoral",
+         "turnout", "campaign", "candidate", "polling", "poll",
+         "democrat", "republican", "partisan"],
+        1.0
+    ),
+    "Social Mobility": KeywordEntry(
+        "mobility",
+        ["intergenerational", "upward mobility", "downward mobility",
+         "economic mobility", "income mobility", "opportunity",
+         "social mobility", "class", "socioeconomic"],
+        1.0
+    ),
+    "Conflict and Security": KeywordEntry(
+        "conflict",
+        ["war", "civil war", "violence", "military", "peace",
+         "terrorism", "security", "battle", "casualty", "armed"],
+        1.0
+    ),
+    "Field Experiments": KeywordEntry(
+        "field experiment",
+        ["rct", "randomized controlled", "randomized experiment",
+         "randomization", "treatment arm", "control arm", "random assignment"],
+        1.0
+    ),
+    "Natural Experiments": KeywordEntry(
+        "natural experiment",
+        ["quasi-experiment", "exogenous shock", "policy change",
+         "reform", "plausibly exogenous", "exogenous variation"],
+        1.0
+    ),
+    "Structural Estimation": KeywordEntry(
+        "structural",
+        ["structural model", "discrete choice", "demand estimation",
+         "counterfactual", "structural estimation"],
+        1.0
+    ),
+    "Mechanism Design": KeywordEntry(
+        "mechanism design",
+        ["auction", "matching market", "market design", "allocation mechanism"],
+        1.0
+    ),
+    "Policy Evaluation": KeywordEntry(
+        "policy evaluation",
+        ["program evaluation", "impact evaluation", "effectiveness",
+         "cost-benefit", "policy analysis", "intervention"],
+        1.0
+    ),
+    "Machine Learning": KeywordEntry(
+        "machine learning",
+        ["ml ", "artificial intelligence", "ai ", "neural network",
+         "deep learning", "prediction", "algorithm", "predictive"],
+        0.95
+    )
+}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# DATA STRUCTURES
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @dataclass
@@ -411,186 +519,301 @@ class UserProfile:
     region: str
 
 
+@dataclass
+class MatchScore:
+    total: float
+    concept_score: float
+    keyword_score: float
+    method_score: float
+    quality_score: float
+    matched_interests: List[str]
+    matched_methods: List[str]
+    explanation: str
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# MATCHING
+# TEXT PROCESSING
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def tokenize(text: str) -> List[str]:
+def normalize_text(text: str) -> str:
     if not text:
-        return []
+        return ""
     text = text.lower()
-    text = re.sub(r'[^\w\s-]', ' ', text)
-    tokens = text.split()
-    return [t for t in tokens if t not in STOPWORDS and len(t) > 2]
+    text = text.replace("-", " ").replace("–", " ").replace("—", " ")
+    text = " ".join(text.split())
+    return text
 
 
-def get_ngrams(tokens: List[str], n: int) -> List[str]:
-    if len(tokens) < n:
-        return []
-    return [" ".join(tokens[i:i+n]) for i in range(len(tokens) - n + 1)]
+def text_contains_any(text: str, terms: List[str]) -> bool:
+    """Check if text contains any of the terms."""
+    text_norm = normalize_text(text)
+    for term in terms:
+        term_norm = normalize_text(term)
+        if term_norm in text_norm:
+            return True
+    return False
 
 
-def weighted_match(text: str, keywords: Dict[str, float]) -> Tuple[float, List[str]]:
-    if not keywords:
-        return 0.0, []
+def count_keyword_matches(text: str, entry: KeywordEntry) -> Tuple[int, float]:
+    """
+    Count how many terms from a keyword entry appear in text.
+    Returns (match_count, weighted_score).
+    """
+    text_norm = normalize_text(text)
+    all_terms = [entry.canonical] + entry.synonyms
     
-    text_lower = text.lower()
-    tokens = tokenize(text)
-    token_set = set(tokens)
-    bigrams = set(get_ngrams(tokens, 2))
-    trigrams = set(get_ngrams(tokens, 3))
+    matches = 0
+    for term in all_terms:
+        term_norm = normalize_text(term)
+        if term_norm and term_norm in text_norm:
+            matches += 1
     
-    matched = []
-    total_weight = 0.0
-    max_weight = sum(keywords.values())
+    # More matches = stronger signal (but with diminishing returns)
+    if matches == 0:
+        return 0, 0.0
+    elif matches == 1:
+        score = 0.6 * entry.weight
+    elif matches == 2:
+        score = 0.8 * entry.weight
+    else:
+        score = 1.0 * entry.weight
     
-    for kw, weight in keywords.items():
-        if " " in kw:
-            if kw in text_lower:
-                matched.append(kw)
-                total_weight += weight
-        else:
-            if kw in token_set:
-                matched.append(kw)
-                total_weight += weight
-    
-    score = min(1.0, total_weight / (max_weight * 0.12)) if max_weight > 0 else 0.0
-    return score, matched
+    return matches, score
 
 
-class SemanticMatcher:
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# SCORING ENGINE
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class RelevanceScorer:
     
-    FIELD_W = 0.25
-    INTEREST_W = 0.35
-    METHOD_W = 0.25
-    REGION_W = 0.10
-    
-    TIER_BONUS = {1: 0.12, 2: 0.06, 3: 0.02, 4: 0.0}
+    TIER_SCORES = {1: 1.0, 2: 0.75, 3: 0.5, 4: 0.2}
     
     def __init__(self, profile: UserProfile):
         self.profile = profile
+        
+        # Build concept targets
+        self.target_concepts: Set[str] = set()
+        for interest in profile.interests:
+            if interest in INTEREST_TO_CONCEPTS:
+                for c in INTEREST_TO_CONCEPTS[interest]:
+                    self.target_concepts.add(normalize_text(c))
+        
+        if profile.primary_field in FIELD_TO_CONCEPTS:
+            for c in FIELD_TO_CONCEPTS[profile.primary_field]:
+                self.target_concepts.add(normalize_text(c))
+        
+        # Adaptive weights based on user emphasis
+        n_interests = max(1, len(profile.interests))
+        n_methods = max(1, len(profile.methods))
+        
+        # Base weights
+        self.w_concept = 0.30
+        self.w_interest = 0.30
+        self.w_method = 0.25
+        self.w_quality = 0.15
+        
+        # Adjust: more methods selected → weight methods higher
+        if n_methods >= 3:
+            self.w_method += 0.05
+            self.w_interest -= 0.05
     
-    def _score_field(self, text: str) -> Tuple[float, List[str]]:
-        kw = FIELD_KEYWORDS.get(self.profile.primary_field, {})
-        return weighted_match(text, kw)
+    def _score_concepts(self, paper: dict) -> Tuple[float, List[str]]:
+        """Match OpenAlex concepts against user interests."""
+        concepts = paper.get("concepts", [])
+        if not concepts or not self.target_concepts:
+            return 0.0, []
+        
+        matched = []
+        weighted_sum = 0.0
+        
+        for concept in concepts:
+            name = normalize_text(concept.get("name", ""))
+            conf = concept.get("score", 0)
+            
+            for target in self.target_concepts:
+                # Flexible matching: either contains the other
+                if target in name or name in target:
+                    matched.append(concept.get("name", ""))
+                    weighted_sum += conf
+                    break
+        
+        # Normalize: 1.5 cumulative confidence = perfect score
+        score = min(1.0, weighted_sum / 1.2)
+        return score, matched[:5]
     
-    def _score_interests(self, text: str) -> Tuple[float, List[str]]:
+    def _score_interest_keywords(self, text: str) -> Tuple[float, List[str]]:
+        """Score interest keywords in title/abstract."""
         if not self.profile.interests:
             return 0.0, []
         
-        all_matched = []
+        matched = []
         scores = []
         
         for i, interest in enumerate(self.profile.interests):
-            kw = INTEREST_KEYWORDS.get(interest, {})
-            score, matches = weighted_match(text, kw)
-            if matches:
-                all_matched.append(interest)
-            # Position weighting: first interest matters more
-            weight = 1.0 - (i * 0.08)
-            scores.append(score * max(0.5, weight))
+            if interest not in INTEREST_KEYWORDS:
+                scores.append(0.0)
+                continue
+            
+            entry = INTEREST_KEYWORDS[interest]
+            count, score = count_keyword_matches(text, entry)
+            
+            if count > 0:
+                matched.append(interest)
+            
+            # Position weight: first = 1.0, second = 0.9, etc.
+            pos_weight = max(0.6, 1.0 - i * 0.1)
+            scores.append(score * pos_weight)
         
-        avg = sum(scores) / len(scores) if scores else 0.0
+        if not scores:
+            return 0.0, []
         
-        # Boost for multiple matches
-        if len(all_matched) >= 3:
-            avg *= 1.25
-        elif len(all_matched) >= 2:
-            avg *= 1.12
+        # Take best score + bonus for multiple matches
+        best = max(scores)
+        avg = sum(scores) / len(scores)
         
-        return min(1.0, avg), all_matched
+        combined = best * 0.6 + avg * 0.4
+        
+        # Bonus for multiple strong matches
+        if len(matched) >= 3:
+            combined *= 1.25
+        elif len(matched) >= 2:
+            combined *= 1.1
+        
+        return min(1.0, combined), matched
     
     def _score_methods(self, text: str) -> Tuple[float, List[str]]:
+        """Detect methodology matches."""
         if not self.profile.methods:
             return 0.0, []
         
-        all_matched = []
+        matched = []
         scores = []
         
         for i, method in enumerate(self.profile.methods):
-            kw = METHOD_KEYWORDS.get(method, {})
-            score, matches = weighted_match(text, kw)
-            if matches:
-                all_matched.append(method)
-            weight = 1.0 - (i * 0.12)
-            scores.append(score * max(0.4, weight))
+            if method not in METHOD_KEYWORDS:
+                scores.append(0.0)
+                continue
+            
+            entry = METHOD_KEYWORDS[method]
+            count, score = count_keyword_matches(text, entry)
+            
+            if count > 0:
+                matched.append(method)
+            
+            pos_weight = max(0.5, 1.0 - i * 0.12)
+            scores.append(score * pos_weight)
         
-        avg = sum(scores) / len(scores) if scores else 0.0
+        if not scores:
+            return 0.0, []
         
-        if len(all_matched) >= 2:
-            avg *= 1.15
+        best = max(scores)
+        avg = sum(scores) / len(scores)
+        combined = best * 0.7 + avg * 0.3
         
-        return min(1.0, avg), all_matched
+        if len(matched) >= 2:
+            combined *= 1.15
+        
+        return min(1.0, combined), matched
     
-    def _score_region(self, text: str) -> float:
-        kw = REGION_KEYWORDS.get(self.profile.region, {})
-        score, _ = weighted_match(text, kw)
-        return score
-    
-    def match_paper(self, paper: dict) -> dict:
-        title = paper.get("title", "")
-        abstract = paper.get("abstract", "")
-        concepts = " ".join(c.get("name", "") for c in paper.get("concepts", []))
-        
-        # Title weighted more heavily
-        full_text = f"{title} {title} {abstract} {concepts}"
-        
-        field_score, _ = self._score_field(full_text)
-        interest_score, matched_interests = self._score_interests(full_text)
-        method_score, matched_methods = self._score_methods(full_text)
-        region_score = self._score_region(full_text)
-        
-        base = (
-            self.FIELD_W * field_score +
-            self.INTEREST_W * interest_score +
-            self.METHOD_W * method_score +
-            self.REGION_W * region_score
-        )
-        
+    def _score_quality(self, paper: dict) -> float:
+        """Score journal tier and citations."""
         tier = paper.get("journal_tier", 4)
-        tier_bonus = self.TIER_BONUS.get(tier, 0)
+        tier_score = self.TIER_SCORES.get(tier, 0.2)
         
-        cite_bonus = 0.0
         cites = paper.get("cited_by_count", 0)
-        if cites >= 50:
-            cite_bonus = 0.08
+        if cites >= 100:
+            cite_score = 1.0
+        elif cites >= 50:
+            cite_score = 0.85
         elif cites >= 20:
-            cite_bonus = 0.05
+            cite_score = 0.7
         elif cites >= 5:
-            cite_bonus = 0.02
+            cite_score = 0.5
+        else:
+            cite_score = 0.3
         
-        final = base + tier_bonus + cite_bonus
-        
-        # Scale to 1-10 (generous)
-        scaled = 1.0 + (final * 13.0)
-        scaled = max(1.0, min(10.0, scaled))
-        
-        # Explanation
+        return tier_score * 0.6 + cite_score * 0.4
+    
+    def _build_explanation(self, matched_interests: List[str], matched_methods: List[str], paper: dict) -> str:
         parts = []
+        
         if matched_interests:
             parts.append(f"{', '.join(matched_interests[:2])}")
+        
         if matched_methods:
-            parts.append(f"uses {', '.join(matched_methods[:2])}")
+            methods_str = matched_methods[0] if len(matched_methods) == 1 else f"{matched_methods[0]} + more"
+            parts.append(f"Uses {methods_str}")
+        
+        tier = paper.get("journal_tier", 4)
         if tier == 1:
-            parts.append("top journal")
+            parts.append("Top journal")
         elif tier == 2:
-            parts.append("leading field journal")
+            parts.append("Top field journal")
         
-        explanation = " · ".join(parts) if parts else "General relevance"
-        
-        return {
-            **paper,
-            "relevance_score": round(scaled, 1),
-            "matched_interests": matched_interests,
-            "matched_methods": matched_methods,
-            "match_explanation": explanation
-        }
+        return " · ".join(parts) if parts else "Related to your field"
     
-    def rank_papers(self, papers: List[dict]) -> List[dict]:
-        scored = [self.match_paper(p) for p in papers]
-        scored.sort(key=lambda x: x["relevance_score"], reverse=True)
-        return scored
+    def score_paper(self, paper: dict) -> MatchScore:
+        title = paper.get("title", "")
+        abstract = paper.get("abstract", "")
+        text = f"{title} {title} {title} {abstract}"  # Title 3x weight
+        
+        concept_score, matched_concepts = self._score_concepts(paper)
+        keyword_score, matched_interests = self._score_interest_keywords(text)
+        method_score, matched_methods = self._score_methods(text)
+        quality_score = self._score_quality(paper)
+        
+        # Combine interest signals: best of concept OR keyword
+        interest_combined = max(concept_score, keyword_score)
+        # But if both are good, give a bonus
+        if concept_score > 0.3 and keyword_score > 0.3:
+            interest_combined = min(1.0, interest_combined * 1.15)
+        
+        # Weighted combination
+        raw = (
+            self.w_concept * concept_score +
+            self.w_interest * keyword_score +
+            self.w_method * method_score +
+            self.w_quality * quality_score
+        )
+        
+        # CALIBRATION to 1-10 scale
+        # Designed so that:
+        #   raw >= 0.45 → 8+ (excellent)
+        #   raw >= 0.30 → 6.5+ (very good)
+        #   raw >= 0.18 → 5+ (good)
+        #   raw >= 0.10 → 3.5+ (some relevance)
+        
+        if raw >= 0.45:
+            final = 8.0 + (raw - 0.45) / 0.55 * 2.0
+        elif raw >= 0.30:
+            final = 6.5 + (raw - 0.30) / 0.15 * 1.5
+        elif raw >= 0.18:
+            final = 5.0 + (raw - 0.18) / 0.12 * 1.5
+        elif raw >= 0.10:
+            final = 3.5 + (raw - 0.10) / 0.08 * 1.5
+        else:
+            final = 1.0 + raw / 0.10 * 2.5
+        
+        final = max(1.0, min(10.0, final))
+        
+        explanation = self._build_explanation(matched_interests, matched_methods, paper)
+        
+        return MatchScore(
+            total=round(final, 1),
+            concept_score=round(concept_score, 3),
+            keyword_score=round(keyword_score, 3),
+            method_score=round(method_score, 3),
+            quality_score=round(quality_score, 3),
+            matched_interests=matched_interests,
+            matched_methods=matched_methods,
+            explanation=explanation
+        )
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PUBLIC API
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def create_profile(
     name: str,
@@ -607,12 +830,27 @@ def process_papers(profile: UserProfile, papers: List[dict]) -> Tuple[List[dict]
     if not papers:
         return [], "No papers found."
     
-    matcher = SemanticMatcher(profile)
-    ranked = matcher.rank_papers(papers)
+    scorer = RelevanceScorer(profile)
     
-    high = sum(1 for p in ranked if p["relevance_score"] >= 7.0)
+    results = []
+    for paper in papers:
+        match = scorer.score_paper(paper)
+        
+        enriched = {
+            **paper,
+            "relevance_score": match.total,
+            "matched_interests": match.matched_interests,
+            "matched_methods": match.matched_methods,
+            "match_explanation": match.explanation
+        }
+        results.append(enriched)
     
-    return ranked, f"Analyzed {len(ranked)} papers. {high} highly relevant."
+    results.sort(key=lambda x: x["relevance_score"], reverse=True)
+    
+    high = sum(1 for p in results if p["relevance_score"] >= 7.0)
+    summary = f"Analyzed {len(papers)} papers · {high} highly relevant"
+    
+    return results, summary
 
 
 @lru_cache(maxsize=1)
