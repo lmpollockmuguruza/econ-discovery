@@ -244,6 +244,53 @@ st.markdown("""
     details[data-testid="stExpander"] > div {
         background-color: #ffffff !important;
     }
+    
+    /* ===== CUSTOM ABSTRACT EXPANDER ===== */
+    .abstract-expander {
+        margin-top: 0.5rem;
+        border: 1px solid #e5e5e5;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    .abstract-expander summary {
+        background-color: #f5f5f5;
+        color: #1a1a1a !important;
+        padding: 0.6rem 1rem;
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 500;
+        list-style: none;
+        display: flex;
+        align-items: center;
+    }
+    
+    .abstract-expander summary::-webkit-details-marker {
+        display: none;
+    }
+    
+    .abstract-expander summary::before {
+        content: "▸";
+        margin-right: 0.5rem;
+        font-size: 0.7rem;
+        transition: transform 0.2s ease;
+    }
+    
+    .abstract-expander[open] summary::before {
+        transform: rotate(90deg);
+    }
+    
+    .abstract-expander summary:hover {
+        background-color: #eeeeee;
+    }
+    
+    .abstract-content {
+        padding: 1rem;
+        background-color: #ffffff;
+        color: #333333 !important;
+        font-size: 0.9rem;
+        line-height: 1.65;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -534,8 +581,14 @@ def step_results():
         
         st.markdown(" ".join(tags) + '</div></div>', unsafe_allow_html=True)
         
-        with st.expander("Read abstract"):
-            st.write(p.get("abstract", "No abstract available."))
+        # Pure HTML expander to avoid Streamlit rendering issues
+        abstract_text = p.get("abstract", "No abstract available.").replace('"', '&quot;').replace("'", "&#39;")
+        st.markdown(f'''
+        <details class="abstract-expander">
+            <summary>Read abstract</summary>
+            <div class="abstract-content">{abstract_text}</div>
+        </details>
+        ''', unsafe_allow_html=True)
         
         link = p.get("doi_url") or p.get("oa_url")
         if link:
