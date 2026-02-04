@@ -22,32 +22,25 @@ st.set_page_config(
 )
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# MINIMAL CSS
+# CSS - STYLING (theme colors handled by config.toml)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
     
-    /* Force light background */
-    .stApp {
-        background-color: #ffffff !important;
+    * { 
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; 
     }
-    
-    * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
     
     #MainMenu, footer, header, .stDeployButton { display: none !important; }
     
     .block-container {
         max-width: 600px;
         padding: 3rem 1.5rem;
-        background-color: #ffffff;
     }
     
-    h1, h2, h3, h4, h5, h6, p, span, label, div {
-        color: #1a1a1a !important;
-    }
-    
+    /* ===== CUSTOM TEXT CLASSES ===== */
     .main-title {
         font-size: 2.5rem !important;
         font-weight: 300 !important;
@@ -88,104 +81,32 @@ st.markdown("""
         line-height: 1.5;
     }
     
-    .stButton > button {
-        width: 100%;
-        border-radius: 8px;
-        padding: 0.75rem 1.5rem;
-        font-weight: 500;
-        font-size: 0.95rem;
-        transition: all 0.15s ease;
-    }
-    
-    .stButton > button[kind="primary"] {
-        background: #1a1a1a !important;
-        color: #ffffff !important;
-        border: none !important;
-    }
-    
-    .stButton > button[kind="primary"]:hover {
-        background: #333333 !important;
-    }
-    
-    .stButton > button[kind="secondary"] {
-        background: #ffffff !important;
+    .greeting {
+        font-size: 1.1rem !important;
         color: #1a1a1a !important;
-        border: 1px solid #dddddd !important;
+        margin-bottom: 2rem;
     }
     
-    /* Selectbox and Multiselect styling */
+    /* ===== BUTTONS ===== */
+    .stButton button {
+        width: 100%;
+        border-radius: 8px !important;
+        padding: 0.75rem 1.5rem !important;
+        font-weight: 500 !important;
+        font-size: 0.95rem !important;
+    }
+    
+    /* ===== FORM ELEMENTS ===== */
     .stSelectbox > div > div,
     .stMultiSelect > div > div {
-        border-radius: 8px;
-        background-color: #ffffff !important;
-        color: #1a1a1a !important;
+        border-radius: 8px !important;
     }
     
-    .stSelectbox [data-baseweb="select"],
-    .stMultiSelect [data-baseweb="select"] {
-        background-color: #ffffff !important;
+    .stTextInput input {
+        border-radius: 8px !important;
     }
     
-    .stSelectbox [data-baseweb="select"] > div,
-    .stMultiSelect [data-baseweb="select"] > div {
-        background-color: #ffffff !important;
-        color: #1a1a1a !important;
-    }
-    
-    /* Dropdown menu */
-    [data-baseweb="popover"] {
-        background-color: #ffffff !important;
-    }
-    
-    [data-baseweb="menu"] {
-        background-color: #ffffff !important;
-    }
-    
-    [data-baseweb="menu"] li {
-        background-color: #ffffff !important;
-        color: #1a1a1a !important;
-    }
-    
-    [data-baseweb="menu"] li:hover {
-        background-color: #f0f0f0 !important;
-    }
-    
-    /* Selected items in multiselect */
-    [data-baseweb="tag"] {
-        background-color: #e8e8e8 !important;
-        color: #1a1a1a !important;
-    }
-    
-    /* Input text */
-    .stSelectbox input,
-    .stMultiSelect input {
-        color: #1a1a1a !important;
-        background-color: #ffffff !important;
-    }
-    
-    /* Placeholder text */
-    .stSelectbox input::placeholder,
-    .stMultiSelect input::placeholder {
-        color: #888888 !important;
-    }
-    
-    .stTextInput > div > div > input {
-        border-radius: 8px;
-        background-color: #ffffff !important;
-        color: #1a1a1a !important;
-    }
-    
-    /* Fix any remaining dark elements */
-    [data-baseweb="input"] {
-        background-color: #ffffff !important;
-        color: #1a1a1a !important;
-    }
-    
-    [data-baseweb="base-input"] {
-        background-color: #ffffff !important;
-        color: #1a1a1a !important;
-    }
-    
+    /* ===== PROGRESS DOTS ===== */
     .progress-dots {
         display: flex;
         justify-content: center;
@@ -203,8 +124,9 @@ st.markdown("""
     .dot.active { background-color: #1a1a1a; }
     .dot.done { background-color: #1a1a1a; }
     
+    /* ===== PAPER CARDS ===== */
     .paper-card {
-        border: 1px solid #eeeeee;
+        border: 1px solid #e5e5e5;
         border-radius: 12px;
         padding: 1.25rem;
         margin-bottom: 1rem;
@@ -265,7 +187,7 @@ st.markdown("""
     .score-med { color: #7a5a1a !important; }
     
     .summary-box {
-        background-color: #f9f9f9;
+        background-color: #f0f0f0;
         border-radius: 12px;
         padding: 1.5rem;
         margin-bottom: 2rem;
@@ -283,36 +205,6 @@ st.markdown("""
         color: #666666 !important;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-    }
-    
-    .greeting {
-        font-size: 1.1rem !important;
-        color: #1a1a1a !important;
-        margin-bottom: 2rem;
-    }
-    
-    /* Fix Streamlit's default dark mode overrides */
-    [data-testid="stMarkdownContainer"] p {
-        color: #1a1a1a !important;
-    }
-    
-    [data-testid="stMarkdownContainer"] {
-        color: #1a1a1a !important;
-    }
-    
-    .stSlider label, .stRadio label {
-        color: #1a1a1a !important;
-    }
-    
-    /* Expander styling */
-    .streamlit-expanderHeader {
-        color: #1a1a1a !important;
-        background-color: #f9f9f9 !important;
-    }
-    
-    .streamlit-expanderContent {
-        color: #444444 !important;
-        background-color: #ffffff !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -399,7 +291,8 @@ def step_level():
     st.markdown('<div class="step-hint">This helps us calibrate recommendations.</div>', unsafe_allow_html=True)
     
     opts = get_profile_options()
-    level = st.selectbox("Level", opts["academic_levels"], index=opts["academic_levels"].index(st.session_state.level) if st.session_state.level in opts["academic_levels"] else 2, label_visibility="collapsed")
+    idx = opts["academic_levels"].index(st.session_state.level) if st.session_state.level in opts["academic_levels"] else 2
+    level = st.selectbox("Level", opts["academic_levels"], index=idx, label_visibility="collapsed")
     st.session_state.level = level
     
     st.markdown("<br>", unsafe_allow_html=True)
@@ -422,7 +315,8 @@ def step_field():
     st.markdown('<div class="step-hint">Choose the area closest to your research.</div>', unsafe_allow_html=True)
     
     opts = get_profile_options()
-    field = st.selectbox("Field", opts["primary_fields"], index=opts["primary_fields"].index(st.session_state.field) if st.session_state.field in opts["primary_fields"] else 3, label_visibility="collapsed")
+    idx = opts["primary_fields"].index(st.session_state.field) if st.session_state.field in opts["primary_fields"] else 3
+    field = st.selectbox("Field", opts["primary_fields"], index=idx, label_visibility="collapsed")
     st.session_state.field = field
     
     st.markdown("<br>", unsafe_allow_html=True)
@@ -488,7 +382,7 @@ def step_sources():
     dots(6)
     
     st.markdown('<div class="step-title">Which journals?</div>', unsafe_allow_html=True)
-    st.markdown('<div class="step-hint">Choose the journals you want to search.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-hint">Choose the journals and time range to search.</div>', unsafe_allow_html=True)
     
     field_type = st.radio("Field", ["Economics", "Political Science", "Both"], horizontal=True, label_visibility="collapsed")
     
@@ -526,7 +420,8 @@ def step_sources():
     
     opts = get_profile_options()
     st.markdown("##### Region focus")
-    region = st.selectbox("Region", opts["regions"], index=opts["regions"].index(st.session_state.region) if st.session_state.region in opts["regions"] else 0, label_visibility="collapsed")
+    idx = opts["regions"].index(st.session_state.region) if st.session_state.region in opts["regions"] else 0
+    region = st.selectbox("Region", opts["regions"], index=idx, label_visibility="collapsed")
     st.session_state.region = region
     
     st.markdown("<br>", unsafe_allow_html=True)
@@ -560,7 +455,6 @@ def step_results():
     with c2:
         st.markdown(f'<div class="summary-box"><div class="summary-num">{high}</div><div class="summary-label">Highly Relevant</div></div>', unsafe_allow_html=True)
     
-    # Filters
     min_score = st.slider("Minimum relevance", 1.0, 10.0, 1.0, 0.5)
     
     filtered = [p for p in papers if p["relevance_score"] >= min_score]
@@ -602,7 +496,6 @@ def step_results():
         
         st.markdown(" ".join(tags) + '</div></div>', unsafe_allow_html=True)
         
-        # Abstract expander (using native streamlit to avoid jank)
         with st.expander("Read abstract"):
             st.write(p.get("abstract", "No abstract available."))
         
