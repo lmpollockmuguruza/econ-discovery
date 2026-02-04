@@ -113,13 +113,75 @@ st.markdown("""
         border: 1px solid #dddddd !important;
     }
     
-    .stSelectbox > div > div, .stMultiSelect > div > div {
+    /* Selectbox and Multiselect styling */
+    .stSelectbox > div > div,
+    .stMultiSelect > div > div {
         border-radius: 8px;
         background-color: #ffffff !important;
+        color: #1a1a1a !important;
+    }
+    
+    .stSelectbox [data-baseweb="select"],
+    .stMultiSelect [data-baseweb="select"] {
+        background-color: #ffffff !important;
+    }
+    
+    .stSelectbox [data-baseweb="select"] > div,
+    .stMultiSelect [data-baseweb="select"] > div {
+        background-color: #ffffff !important;
+        color: #1a1a1a !important;
+    }
+    
+    /* Dropdown menu */
+    [data-baseweb="popover"] {
+        background-color: #ffffff !important;
+    }
+    
+    [data-baseweb="menu"] {
+        background-color: #ffffff !important;
+    }
+    
+    [data-baseweb="menu"] li {
+        background-color: #ffffff !important;
+        color: #1a1a1a !important;
+    }
+    
+    [data-baseweb="menu"] li:hover {
+        background-color: #f0f0f0 !important;
+    }
+    
+    /* Selected items in multiselect */
+    [data-baseweb="tag"] {
+        background-color: #e8e8e8 !important;
+        color: #1a1a1a !important;
+    }
+    
+    /* Input text */
+    .stSelectbox input,
+    .stMultiSelect input {
+        color: #1a1a1a !important;
+        background-color: #ffffff !important;
+    }
+    
+    /* Placeholder text */
+    .stSelectbox input::placeholder,
+    .stMultiSelect input::placeholder {
+        color: #888888 !important;
     }
     
     .stTextInput > div > div > input {
         border-radius: 8px;
+        background-color: #ffffff !important;
+        color: #1a1a1a !important;
+    }
+    
+    /* Fix any remaining dark elements */
+    [data-baseweb="input"] {
+        background-color: #ffffff !important;
+        color: #1a1a1a !important;
+    }
+    
+    [data-baseweb="base-input"] {
         background-color: #ffffff !important;
         color: #1a1a1a !important;
     }
