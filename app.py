@@ -206,6 +206,44 @@ st.markdown("""
         text-transform: uppercase;
         letter-spacing: 0.05em;
     }
+    
+    /* ===== EXPANDER FIX ===== */
+    [data-testid="stExpander"] {
+        background-color: #ffffff !important;
+        border: 1px solid #e5e5e5 !important;
+        border-radius: 8px !important;
+        margin-top: 0.5rem !important;
+    }
+    
+    [data-testid="stExpander"] summary {
+        background-color: #f5f5f5 !important;
+        color: #1a1a1a !important;
+        padding: 0.75rem 1rem !important;
+    }
+    
+    [data-testid="stExpander"] summary span {
+        color: #1a1a1a !important;
+    }
+    
+    [data-testid="stExpander"] > div {
+        background-color: #ffffff !important;
+    }
+    
+    [data-testid="stExpander"] [data-testid="stMarkdownContainer"] {
+        background-color: #ffffff !important;
+        color: #333333 !important;
+        padding: 1rem !important;
+    }
+    
+    [data-testid="stExpander"] [data-testid="stMarkdownContainer"] p {
+        color: #333333 !important;
+        line-height: 1.6 !important;
+        margin: 0 !important;
+    }
+    
+    details[data-testid="stExpander"] > div {
+        background-color: #ffffff !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
